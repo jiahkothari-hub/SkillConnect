@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DNS Resolution Simulator</title>
+<meta name="description" content="DNS Resolution, Caching and Query Analysis System - interactive simulation of the DNS hierarchy, recursive/iterative queries, TTL-based caching and response time comparison.">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f1;
+  --surface: #fcfcfb;
+  --surface-2: #f0efec;
+  --border: #dcdad3;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --muted: #7b7a74;
+  --accent: #2a78d6;
+  --accent-soft: #dce9fa;
+  --series-1: #2a78d6;      /* with cache / actual */
+  --series-2: #eb6834;      /* without cache */
+  --pk-query: #2a78d6;
+  --pk-referral: #eb6834;
+  --pk-answer: #1a8f4f;
+  --pk-error: #d33b3b;
+  --pk-cache: #7a5cc9;
+  --good: #1a7f45;
+  --good-bg: #e2f4e9;
+  --bad: #c22f2f;
+  --bad-bg: #fbe6e5;
+  --warn: #9a6a00;
+  --warn-bg: #fdf1d6;
+  --node-fill: #ffffff;
+  --edge: #c9c7bf;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211;
+    --surface: #1a1a19;
+    --surface-2: #242422;
+    --border: #383835;
+    --text: #ffffff;
+    --text-2: #c3c2b7;
+    --muted: #93928a;
+    --accent: #3987e5;
+    --accent-soft: #1d3350;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --pk-query: #3987e5;
+    --pk-referral: #e0773f;
+    --pk-answer: #2fb36b;
+    --pk-error: #e66767;
+    --pk-cache: #9085e9;
+    --good: #4cc983;
+    --good-bg: #173524;
+    --bad: #f07b7b;
+    --bad-bg: #3d1c1c;
+    --warn: #e5b44a;
+    --warn-bg: #3a2e12;
+    --node-fill: #222220;
+    --edge: #4a4a46;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --surface-2: #242422; --border: #383835;
+  --text: #ffffff; --text-2: #c3c2b7; --muted: #93928a; --accent: #3987e5; --accent-soft: #1d3350;
+  --series-1: #3987e5; --series-2: #d95926;
+  --pk-query: #3987e5; --pk-referral: #e0773f; --pk-answer: #2fb36b; --pk-error: #e66767; --pk-cache: #9085e9;
+  --good: #4cc983; --good-bg: #173524; --bad: #f07b7b; --bad-bg: #3d1c1c; --warn: #e5b44a; --warn-bg: #3a2e12;
+  --node-fill: #222220; --edge: #4a4a46; --shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+header.top {
+  padding: 18px 24px 14px; border-bottom: 1px solid var(--border); background: var(--surface);
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+}
+header.top h1 { margin: 0; font-size: 20px; letter-spacing: -.01em; }
+header.top p { margin: 2px 0 0; color: var(--text-2); font-size: 13px; }
+.sim-note {
+  font-size: 12px; color: var(--warn); background: var(--warn-bg); padding: 6px 10px; border-radius: 6px;
+  max-width: 520px;
+}
+main { padding: 16px 24px 40px; display: grid; gap: 16px; max-width: 1500px; margin: 0 auto; }
+.row { display: grid; gap: 16px; }
+.row.top { grid-template-columns: 340px minmax(0, 1fr); }
+.row.two { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+@media (max-width: 1100px) { .row.top, .row.two { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 600px) { main { padding: 12px 16px 32px; } header.top { padding: 14px 16px; } }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 14px 16px; min-width: 0;
+}
+.card h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card h2 .sub { font-weight: 400; color: var(--muted); font-size: 12px; }
+.card h3 { font-size: 13px; margin: 14px 0 6px; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
+
+label.f { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 4px; font-weight: 600; }
+input[type=text], input[type=number], select {
+  width: 100%; padding: 8px 10px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); font: inherit;
+}
+input[type=text]:focus, input[type=number]:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.domain-row { display: flex; gap: 8px; }
+.domain-row input { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+button {
+  font: inherit; cursor: pointer; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); padding: 7px 12px;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.danger { color: var(--bad); }
+button.small { padding: 3px 8px; font-size: 12px; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.presets button { font-family: ui-monospace, Menlo, monospace; font-size: 12px; padding: 4px 8px; }
+.presets button.nx { color: var(--bad); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg label { padding: 8px; text-align: center; cursor: pointer; font-weight: 600; font-size: 13px; background: var(--surface-2); }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--accent); color: #fff; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin: 6px 0; cursor: pointer; }
+.check input { margin-top: 3px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+details.cfg summary { cursor: pointer; font-weight: 600; font-size: 13px; margin-top: 12px; color: var(--text-2); }
+.hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+
+/* Diagram */
+.diagram-wrap { position: relative; }
+svg#topo { width: 100%; height: auto; display: block; background: var(--surface-2); border-radius: 8px; }
+.edge { stroke: var(--edge); stroke-width: 2; fill: none; }
+.edge.dashed { stroke-dasharray: 5 5; }
+.edge.lit { stroke: var(--accent); stroke-width: 3; }
+.hop-trail { fill: none; stroke-width: 2.5; opacity: .55; stroke-dasharray: 6 4; }
+.node rect.box { fill: var(--node-fill); stroke: var(--border); stroke-width: 1.5; transition: stroke .2s, fill .2s; }
+.node text { fill: var(--text); font-size: 13px; font-weight: 700; text-anchor: middle; pointer-events: none; }
+.node text.sub { fill: var(--muted); font-size: 10px; font-weight: 500; }
+.node { cursor: pointer; }
+.node.visited rect.box { stroke: var(--accent); stroke-width: 2; }
+.node.active rect.box { stroke: var(--accent); stroke-width: 3.5; fill: var(--accent-soft); }
+.node.hit rect.box { stroke: var(--good); stroke-width: 3.5; fill: var(--good-bg); }
+.node.fail rect.box { stroke: var(--bad); stroke-width: 3.5; fill: var(--bad-bg); }
+.node.dim { opacity: .45; }
+.level-label { fill: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .06em; }
+.packet circle { stroke: var(--surface); stroke-width: 2; }
+.packet text { font-size: 11px; font-weight: 700; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; text-anchor: middle; }
+.ip-bubble rect { fill: var(--good-bg); stroke: var(--good); }
+.ip-bubble text { fill: var(--good); font: 700 12px ui-monospace, Menlo, monospace; text-anchor: middle; }
+.ip-bubble.nx rect { fill: var(--bad-bg); stroke: var(--bad); }
+.ip-bubble.nx text { fill: var(--bad); }
+
+.status-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }
+.clock { font: 700 22px ui-monospace, Menlo, monospace; }
+.clock small { font-size: 12px; color: var(--muted); font-weight: 500; }
+.narration {
+  background: var(--surface-2); border-left: 4px solid var(--accent); border-radius: 6px;
+  padding: 10px 12px; margin-top: 10px; min-height: 44px; font-size: 14px;
+}
+.breadcrumb { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 10px; font-size: 12px; }
+.breadcrumb .chip { padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); font-weight: 600; }
+.breadcrumb .chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.breadcrumb .chip.hit { background: var(--good); color: #fff; border-color: var(--good); }
+.breadcrumb .chip.miss { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+.breadcrumb .chip.err { background: var(--bad); color: #fff; border-color: var(--bad); }
+.breadcrumb .arr { color: var(--muted); }
+.legend-inline { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--text-2); margin-top: 8px; }
+.legend-inline span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .03em; white-space: nowrap; }
+.badge.hit { background: var(--good-bg); color: var(--good); }
+.badge.miss { background: var(--warn-bg); color: var(--warn); }
+.badge.nx { background: var(--bad-bg); color: var(--bad); }
+.badge.nocache { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+.badge.rec, .badge.itr { background: var(--accent-soft); color: var(--accent); }
+
+/* Result */
+.result-main { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.kv { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.kv .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+.kv .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; word-break: break-all; }
+.kv .v.mono { font-family: ui-monospace, Menlo, monospace; font-size: 16px; }
+.compare-bars { margin-top: 12px; display: grid; gap: 6px; }
+.cbar { display: grid; grid-template-columns: 150px minmax(0,1fr) 70px; gap: 8px; align-items: center; font-size: 12px; }
+.cbar .track { background: var(--surface-2); border-radius: 4px; height: 16px; overflow: hidden; }
+.cbar .fill { height: 100%; border-radius: 0 4px 4px 0; transition: width .5s; }
+.cbar .val { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+.explain { font-size: 13px; color: var(--text-2); margin-top: 10px; }
+
+/* Timeline */
+.timeline { max-height: 360px; overflow: auto; font-size: 12.5px; }
+.tl-item { display: grid; grid-template-columns: 58px 16px minmax(0,1fr); gap: 6px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+.tl-item .t { font-family: ui-monospace, Menlo, monospace; color: var(--muted); text-align: right; }
+.tl-item .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; background: var(--c); }
+.tl-item b { font-weight: 700; }
+.tl-item .msg { color: var(--text-2); }
+.tl-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--text-2); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; background: var(--surface-2); position: sticky; top: 0; }
+td.mono { font-family: ui-monospace, Menlo, monospace; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.expired td { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--bad); }
+tr.expired td.keep { text-decoration: none; }
+tr.flash td { animation: flash 1.2s ease-out; }
+@keyframes flash { from { background: var(--accent-soft); } to { background: transparent; } }
+.ttlbar { width: 80px; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }
+.ttlbar i { display: block; height: 100%; background: var(--good); }
+.log-scroll { max-height: 340px; overflow: auto; }
+
+/* Stats */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.tile { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; }
+.tile .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+.tile .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile .d { font-size: 11px; color: var(--text-2); }
+
+.chart { width: 100%; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .grid { stroke: var(--border); stroke-width: 1; }
+.chart .axis text, .chart text.axis { fill: var(--muted); font-size: 11px; }
+.chart .bar { cursor: default; }
+.chart .bar:hover, .chart .bar:focus { opacity: .8; outline: none; }
+.chart-legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); margin: 4px 0 6px; flex-wrap: wrap; }
+.chart-legend span::before { content: ""; display: inline-block; width: 12px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+.empty-chart { color: var(--muted); font-size: 13px; padding: 24px 0; text-align: center; }
+#tooltip {
+  position: fixed; pointer-events: none; z-index: 20; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: var(--shadow);
+  opacity: 0; transition: opacity .1s;
+}
+#tooltip .tv { font-weight: 700; font-size: 13px; }
+#tooltip .tk { color: var(--text-2); }
+#tooltip .ln { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+
+.cmp-table td, .cmp-table th { white-space: normal; }
+.records-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 10px; }
+.zone { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+.zone h4 { margin: 0 0 4px; font-size: 13px; }
+.zone .mono { font-family: ui-monospace, Menlo, monospace; }
+.zone div.r { display: flex; justify-content: space-between; gap: 8px; }
+.node-info { margin-top: 10px; font-size: 12.5px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: none; }
+.node-info.show { display: block; }
+.node-info .mono { font-family: ui-monospace, Menlo, monospace; }
+.err-msg { color: var(--bad); font-size: 12px; margin-top: 6px; min-height: 16px; }
+.theme-toggle { font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>DNS Resolution, Caching and Query Analysis System</h1>
+    <p>Interactive simulation of the DNS hierarchy, recursive &amp; iterative resolution, TTL-based caching and response-time analysis.</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <div class="sim-note"><b>Simulation:</b> all DNS records, server names and network delays are <b>simulated</b> locally in JavaScript. They are not measurements of real internet DNS servers.</div>
+    <button class="theme-toggle small" id="themeBtn" title="Toggle light/dark theme">Theme</button>
+  </div>
+</header>
+
+<main>
+<div class="row top">
+  <!-- ============ LEFT: CONTROLS ============ -->
+  <section class="card" aria-labelledby="qhdr">
+    <h2 id="qhdr">DNS Query</h2>
+    <label class="f" for="domain">Enter Domain Name</label>
+    <div class="domain-row">
+      <input type="text" id="domain" value="example.com" placeholder="e.g. example.com" autocomplete="off" spellcheck="false">
+      <button class="primary" id="resolveBtn">Resolve DNS</button>
+    </div>
+    <div class="err-msg" id="inputErr"></div>
+    <div class="presets" id="presets" aria-label="Preset domains"></div>
+
+    <h3>Query Type</h3>
+    <div class="seg" role="radiogroup" aria-label="Query type">
+      <label><input type="radio" name="mode" value="recursive" checked> Recursive</label>
+      <label><input type="radio" name="mode" value="iterative"> Iterative</label>
+    </div>
+    <p class="hint" id="modeHint"></p>
+
+    <h3>Caching</h3>
+    <label class="check"><input type="checkbox" id="cacheOn" checked> <span><b>Enable resolver cache</b><br><span class="hint">Untick to run every query <i>without caching</i> (full lookup every time).</span></span></label>
+    <label class="check"><input type="checkbox" id="cacheNS" checked> <span>Cache TLD referrals (NS records) in iterative mode<br><span class="hint">Lets the resolver skip the Root for other domains in the same TLD.</span></span></label>
+    <div class="grid3">
+      <div><label class="f" for="ttlA">A TTL (s)</label><input type="number" id="ttlA" value="60" min="1" max="86400"></div>
+      <div><label class="f" for="ttlNS">NS TTL (s)</label><input type="number" id="ttlNS" value="120" min="1" max="86400"></div>
+      <div><label class="f" for="ttlNeg">NXDOMAIN TTL</label><input type="number" id="ttlNeg" value="30" min="1" max="86400"></div>
+    </div>
+    <div class="btn-row">
+      <button class="danger" id="clearCacheBtn">Clear Cache</button>
+      <button id="ffBtn" title="Advance the simulated clock so TTLs expire without waiting">Fast-forward +30 s</button>
+      <button id="compareBtn" title="Resolve the current domain without cache, then again with a cache hit">Compare with / without cache</button>
+    </div>
+    <p class="hint">Simulated clock offset: <b id="clockOffset">0 s</b></p>
+
+    <h3>Animation</h3>
+    <div class="grid2">
+      <div><label class="f" for="speed">Speed</label>
+        <select id="speed"><option value="0.5">0.5× (slow)</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4× (fast)</option></select></div>
+      <div style="display:flex;align-items:flex-end"><label class="check" style="margin:0 0 8px"><input type="checkbox" id="stepMode"> Step-by-step</label></div>
+    </div>
+    <div class="btn-row">
+      <button id="nextBtn" disabled>Next step ▶</button>
+      <button id="skipBtn" disabled>Skip animation ⏭</button>
+    </div>
+
+    <details class="cfg">
+      <summary>Simulated network delays (ms)</summary>
+      <p class="hint">Round-trip time between the resolver and each server, plus per-server processing time. Change these to see how latency affects results.</p>
+      <div class="grid2" style="margin-top:6px">
+        <div><label class="f" for="dClient">Client ↔ Resolver (RTT)</label><input type="number" id="dClient" value="20" min="0"></div>
+        <div><label class="f" for="dCache">Cache lookup</label><input type="number" id="dCache" value="2" min="0"></div>
+        <div><label class="f" for="dRoot">Root (RTT)</label><input type="number" id="dRoot" value="100" min="0"></div>
+        <div><label class="f" for="dTld">TLD (RTT)</label><input type="number" id="dTld" value="80" min="0"></div>
+        <div><label class="f" for="dAuth">Authoritative (RTT)</label><input type="number" id="dAuth" value="120" min="0"></div>
+        <div><label class="f" for="dProc">Server processing</label><input type="number" id="dProc" value="5" min="0"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="jitter"> Add random network jitter (±15%)</label>
+    </details>
+  </section>
+
+  <!-- ============ RIGHT: DIAGRAM ============ -->
+  <section class="card" aria-labelledby="dhdr">
+    <h2 id="dhdr">DNS Hierarchy &amp; Live Resolution <span class="sub">click any server to view its simulated data</span></h2>
+    <div class="status-bar">
+      <div class="clock" id="simClock">0 <small>ms simulated</small></div>
+      <span id="statusBadge"></span>
+      <span id="modeBadge"></span>
+    </div>
+    <div class="diagram-wrap">
+      <svg id="topo" viewBox="0 0 900 540" role="img" aria-label="DNS hierarchy diagram: client, resolver, cache, root, TLD and authoritative servers">
+        <defs>
+          <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <g id="levels"></g>
+        <g id="edges"></g>
+        <g id="trails"></g>
+        <g id="nodes"></g>
+        <g id="bubbles"></g>
+        <g id="packets"></g>
+      </svg>
+    </div>
+    <div class="legend-inline">
+      <span style="--c:var(--pk-query)">Query</span>
+      <span style="--c:var(--pk-referral)">Referral (“ask next server”)</span>
+      <span style="--c:var(--pk-answer)">Answer (IP)</span>
+      <span style="--c:var(--pk-cache)">Cache operation</span>
+      <span style="--c:var(--pk-error)">NXDOMAIN / Miss</span>
+    </div>
+    <div class="breadcrumb" id="breadcrumb" aria-live="polite"></div>
+    <div class="narration" id="narration" aria-live="polite">Enter a domain and press <b>Resolve DNS</b> to start a simulated lookup.</div>
+    <div class="node-info" id="nodeInfo"></div>
+  </section>
+</div>
+
+<div class="row two">
+  <section class="card" aria-labelledby="rhdr">
+    <h2 id="rhdr">Query Result</h2>
+    <div id="resultBox"><p class="tl-empty">No query yet.</p></div>
+  </section>
+  <section class="card" aria-labelledby="thdr">
+    <h2 id="thdr">Resolution Timeline <span class="sub">every message, with cumulative simulated time</span></h2>
+    <div class="timeline" id="timeline"><p class="tl-empty">Steps will appear here during resolution.</p></div>
+  </section>
+</div>
+
+<section class="card" aria-labelledby="chdr">
+  <h2 id="chdr">Resolver Cache <span class="sub" id="cacheCount"></span></h2>
+  <p class="hint" style="margin-top:-4px">Remaining TTL counts down live. When it reaches 0 the entry is <b>EXPIRED</b> and the next query for that name is a cache miss that refreshes it.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Domain</th><th>Type</th><th>Value (IP / NS)</th><th>TTL</th><th>Remaining TTL</th><th>Stored at</th><th>Hits</th><th>Status</th><th></th></tr></thead>
+      <tbody id="cacheBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<div class="row two">
+  <section class="card" aria-labelledby="ahdr">
+    <h2 id="ahdr">Response Time Analysis</h2>
+    <div class="tiles" id="tiles"></div>
+    <div class="chart-legend"><span style="--c:var(--series-2)">Without cache (full resolution)</span><span style="--c:var(--series-1)">Actual response time</span></div>
+    <div class="chart" id="chartPerQuery"></div>
+    <p class="hint">Per query (last 12). The orange bar is the time a full hierarchy lookup takes for that query; the blue bar is what the client actually waited. For cache hits the blue bar is tiny.</p>
+  </section>
+  <section class="card" aria-labelledby="bhdr">
+    <h2 id="bhdr">Caching Benchmark <span class="sub">same query sequence, with vs without cache</span></h2>
+    <div class="grid3">
+      <div><label class="f" for="benchN">Queries</label><input type="number" id="benchN" value="30" min="5" max="200"></div>
+      <div><label class="f" for="benchGap">Gap between (s)</label><input type="number" id="benchGap" value="3" min="0" max="600"></div>
+      <div style="display:flex;align-items:flex-end"><button class="primary" id="benchBtn" style="width:100%">Run benchmark</button></div>
+    </div>
+    <p class="hint">Picks a random sequence from the preset domains (repeats are likely, like real browsing), then runs it twice through fresh resolvers: once with caching disabled and once enabled. Uses the current mode, delays and TTLs on a virtual clock.</p>
+    <div id="benchOut"><p class="empty-chart">Run the benchmark to compare total and average response time.</p></div>
+  </section>
+</div>
+
+<section class="card" aria-labelledby="lhdr">
+  <h2 id="lhdr">Query Log <span class="sub" id="logCount"></span>
+    <span style="margin-left:auto;display:flex;gap:6px"><button class="small" id="exportBtn">Export CSV</button><button class="small danger" id="clearLogBtn">Clear log</button></span>
+  </h2>
+  <div class="table-wrap log-scroll">
+    <table>
+      <thead><tr><th>#</th><th>Time</th><th>Domain</th><th>Mode</th><th>Cache</th><th>Result</th><th>IP Address</th><th>Response</th><th>Without cache</th><th>With cache (hit)</th><th>Messages</th><th>Path</th></tr></thead>
+      <tbody id="logBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<div class="row two">
+  <section class="card" aria-labelledby="xhdr">
+    <h2 id="xhdr">Recursive vs Iterative</h2>
+    <table class="cmp-table">
+      <thead><tr><th>Recursive</th><th>Iterative</th></tr></thead>
+      <tbody>
+        <tr><td>Resolver obtains the final answer</td><td>Resolver follows referrals</td></tr>
+        <tr><td>Client receives the final result</td><td>Each DNS server gives the next direction</td></tr>
+        <tr><td>Resolver hands the lookup to the chain; each server asks the next one</td><td>Resolver contacts each level itself (Root → TLD → Authoritative)</td></tr>
+        <tr><td>Root and TLD servers must hold state and relay the answer back (more load on them)</td><td>Root and TLD answer instantly with a referral and forget the query</td></tr>
+        <tr><td>Resolver only learns the final answer (caches the A record)</td><td>Resolver learns every referral, so it can also cache TLD NS records</td></tr>
+      </tbody>
+    </table>
+    <p class="explain"><b>How the simulation models them:</b> In <b>recursive</b> mode the query travels Resolver → Root → TLD → Authoritative and the answer travels back the same chain. In <b>iterative</b> mode the resolver sends three separate queries and receives two referrals and one answer. Each server adds processing time every time it handles a message, so recursive is slightly slower here, and with NS caching iterative can skip the Root entirely.</p>
+  </section>
+  <section class="card" aria-labelledby="zhdr">
+    <h2 id="zhdr">Simulated DNS Records</h2>
+    <p class="hint" style="margin-top:-4px">Fictional/example data used by the simulator. IPs are illustrative, not live lookups.</p>
+    <div class="records-grid" id="records"></div>
+  </section>
+</div>
+</main>
+<div id="tooltip" role="tooltip"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   1. SIMULATED DNS DATABASE
+   ===================================================================== */
+const DB = {
+  root: { name: "a.root-servers.sim", ip: "198.41.0.4" },
+  tlds: {
+    com: { ns: "a.gtld-servers.sim", ip: "192.5.6.30",
+      zones: {
+        "example.com": { ns: "ns1.example.sim", ip: "199.43.135.53", records: { "example.com": "93.184.216.34", "www.example.com": "93.184.216.34" } },
+        "google.com":  { ns: "ns1.google.sim",  ip: "216.239.32.10", records: { "google.com": "142.250.190.46", "www.google.com": "142.250.190.68", "mail.google.com": "142.250.190.37" } },
+        "openai.com":  { ns: "ns1.openai.sim",  ip: "173.245.58.91", records: { "openai.com": "104.18.33.45", "www.openai.com": "104.18.33.45", "chat.openai.com": "104.18.37.228" } },
+        "github.com":  { ns: "ns1.github.sim",  ip: "205.251.193.165", records: { "github.com": "140.82.112.3", "www.github.com": "140.82.112.3" } },
+        "amazon.com":  { ns: "ns1.amazon.sim",  ip: "156.154.64.10", records: { "amazon.com": "205.251.242.103", "www.amazon.com": "52.94.236.248" } }
+      } },
+    org: { ns: "b0.org-servers.sim", ip: "199.19.54.1",
+      zones: {
+        "wikipedia.org": { ns: "ns0.wikimedia.sim", ip: "208.80.154.238", records: { "wikipedia.org": "208.80.154.224", "www.wikipedia.org": "208.80.154.224", "en.wikipedia.org": "208.80.154.224" } },
+        "mozilla.org":   { ns: "ns1.mozilla.sim",   ip: "205.251.195.10", records: { "mozilla.org": "44.235.246.155", "www.mozilla.org": "44.235.246.155" } },
+        "example.org":   { ns: "ns1.example.sim",   ip: "199.43.135.53", records: { "example.org": "93.184.215.14" } }
+      } },
+    in: { ns: "ns1.registry.in.sim", ip: "37.209.192.12",
+      zones: {
+        "college.in":    { ns: "ns1.college.sim",    ip: "203.0.113.2",  records: { "college.in": "203.0.113.10", "www.college.in": "203.0.113.10", "library.college.in": "203.0.113.11", "exam.college.in": "203.0.113.12" } },
+        "university.in": { ns: "ns1.university.sim", ip: "203.0.113.3",  records: { "university.in": "203.0.113.25", "www.university.in": "203.0.113.25" } },
+        "gov.in":        { ns: "ns1.gov.sim",        ip: "198.51.100.7", records: { "gov.in": "198.51.100.20" } }
+      } }
+  }
+};
+const PRESETS = ["example.com", "google.com", "openai.com", "college.in", "wikipedia.org", "www.example.com", "github.com", "mozilla.org", "library.college.in"];
+const NX_PRESETS = ["unknown-site.com", "mysite.xyz"];
+
+/* =====================================================================
+   2. CACHE (TTL-aware). Uses an injectable clock so the benchmark can
+      run on a virtual clock.
+   ===================================================================== */
+class DNSCache {
+  constructor(now) { this.now = now; this.map = new Map(); }
+  key(type, name) { return type + "|" + name; }
+  put(type, name, value, ttl) {
+    this.map.set(this.key(type, name), { type, name, value, ttl, stored: this.now(), hits: 0 });
+  }
+  peek(type, name) {
+    const e = this.map.get(this.key(type, name));
+    if (!e) return { state: "none" };
+    const rem = this.remaining(e);
+    return { state: rem > 0 ? "valid" : "expired", entry: e, rem };
+  }
+  /* Lookup for an address query: positive (A) or negative (NXDOMAIN) answers */
+  lookupName(name) {
+    const a = this.peek("A", name), n = this.peek("NXDOMAIN", name);
+    if (a.state === "valid") return a;
+    if (n.state === "valid") return n;
+    if (a.state === "expired") return a;
+    if (n.state === "expired") return n;
+    return { state: "none" };
+  }
+  remaining(e) { return e.forceExpired ? 0 : e.ttl - (this.now() - e.stored) / 1000; }
+  remove(type, name) { this.map.delete(this.key(type, name)); }
+  clear() { this.map.clear(); }
+  entries() { return [...this.map.values()]; }
+}
+
+/* =====================================================================
+   3. RESOLUTION ENGINE
+   plan() walks the hierarchy and returns an ordered list of messages
+   (steps). Cache mutations are attached as step.effect so they happen
+   exactly when that message is delivered (animated or instant).
+   ===================================================================== */
+function normalizeDomain(raw) {
+  let d = String(raw || "").trim().toLowerCase();
+  d = d.replace(/^[a-z]+:\/\//, "").split(/[\/?#:]/)[0].replace(/\.$/, "");
+  return d;
+}
+function validDomain(d) {
+  if (!d || d.length > 253) return false;
+  const labels = d.split(".");
+  if (labels.length < 2) return false;
+  return labels.every(l => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l)) && /^[a-z]{2,63}$/.test(labels[labels.length - 1]);
+}
+
+function plan(domain, mode, opts) {
+  const { cache, cfg, jitter } = opts;
+  const J = v => jitter ? Math.max(0, Math.round(v * (0.85 + Math.random() * 0.3))) : Math.round(v);
+  const half = v => v / 2;
+  const steps = [];
+  let total = 0, messages = 0;
+  const add = s => {
+    s.ms = s.ms || 0; total += s.ms; s.t = total;
+    if (s.from !== s.to) messages++;
+    steps.push(s); return s;
+  };
+  const labels = domain.split(".");
+  const tld = labels[labels.length - 1];
+  const zoneName = labels.slice(-2).join(".");
+  const tldInfo = DB.tlds[tld];
+  const zone = tldInfo && tldInfo.zones[zoneName];
+  const ip = zone && zone.records[domain];
+  const tldNode = "tld-" + tld, authNode = "auth-" + tld;
+  const res = { domain, mode, cacheOn: !!cache, steps, outcome: null, ip: null, failedAt: null, ttlLeft: null, cachedNS: false };
+
+  add({ from: "client", to: "resolver", kind: "query", label: "A? " + domain,
+    title: "Client → Resolver",
+    desc: mode === "recursive"
+      ? `Client asks the resolver: “Find the IP address for ${domain}.” (recursive query — the resolver must return the final answer)`
+      : `Client asks the resolver for ${domain}. The resolver will resolve it iteratively, contacting each DNS level itself.`,
+    ms: J(half(cfg.client)) });
+
+  /* ---- 1. cache check ---- */
+  if (cache) {
+    add({ from: "resolver", to: "cache", kind: "cache", label: "lookup",
+      title: "Cache check", desc: `Resolver checks its cache for “${domain}”.`, ms: cfg.cache });
+    const look = cache.lookupName(domain);
+    if (look.state === "valid") {
+      const e = look.entry, neg = e.type === "NXDOMAIN";
+      res.outcome = neg ? "NEG-HIT" : "HIT"; res.ip = neg ? null : e.value; res.ttlLeft = look.rem;
+      add({ from: "cache", to: "resolver", kind: neg ? "error" : "answer", label: "CACHE HIT", badge: "hit",
+        title: "CACHE HIT",
+        desc: neg
+          ? `Cache hit on a negative (NXDOMAIN) entry — the name is known not to exist. Remaining TTL ${Math.ceil(look.rem)} s. No hierarchy lookup needed.`
+          : `CACHE HIT — ${domain} → ${e.value} (remaining TTL ${Math.ceil(look.rem)} s). The full DNS hierarchy lookup is skipped.`,
+        ms: cfg.cache, effect: () => { e.hits++; } });
+      add({ from: "resolver", to: "client", kind: neg ? "error" : "answer", label: neg ? "NXDOMAIN" : e.value,
+        title: "Resolver → Client", desc: neg ? `Resolver returns NXDOMAIN to the client from cache.` : `Resolver returns ${e.value} to the client straight from its cache.`,
+        ms: J(half(cfg.client)) });
+      res.total = total; res.messages = messages; return res;
+    }
+    const expired = look.state === "expired";
+    add({ from: "cache", to: "resolver", kind: "error", label: "CACHE MISS", badge: "miss",
+      title: "CACHE MISS",
+      desc: expired
+        ? `CACHE MISS — an entry for ${domain} exists but its TTL expired ${Math.abs(Math.floor(look.rem))} s ago, so it is no longer valid. It is discarded and a full resolution starts.`
+        : `CACHE MISS — ${domain} is not in the cache. The resolver must query the DNS hierarchy.`,
+      ms: 0, effect: expired ? () => cache.remove(look.entry.type, look.entry.name) : null });
+  }
+
+  const storeAndReturn = () => {
+    if (cache) add({ from: "resolver", to: "cache", kind: "cache", label: "STORE",
+      title: "Store in cache", desc: `Resolver stores A ${domain} → ${ip} in its cache with TTL ${cfg.ttlA} s.`,
+      ms: cfg.cache, effect: () => cache.put("A", domain, ip, cfg.ttlA) });
+    add({ from: "resolver", to: "client", kind: "answer", label: ip,
+      title: "Resolver → Client", desc: `Resolver returns the final answer to the client: ${domain} → ${ip}.`, ms: J(half(cfg.client)) });
+    res.ip = ip; res.outcome = cache ? "MISS" : "NO-CACHE";
+    res.total = total; res.messages = messages; return res;
+  };
+  const failAndReturn = (atNode) => {
+    res.failedAt = atNode;
+    if (cache) add({ from: "resolver", to: "cache", kind: "cache", label: "STORE NX",
+      title: "Negative caching", desc: `Resolver caches the NXDOMAIN result for ${domain} for ${cfg.ttlNeg} s (negative caching).`,
+      ms: cfg.cache, effect: () => cache.put("NXDOMAIN", domain, "NXDOMAIN", cfg.ttlNeg) });
+    add({ from: "resolver", to: "client", kind: "error", label: "NXDOMAIN",
+      title: "DNS Resolution Failed", desc: `DNS Resolution Failed — NXDOMAIN: ${domain} does not exist.`, ms: J(half(cfg.client)) });
+    res.outcome = "NXDOMAIN"; res.total = total; res.messages = messages; return res;
+  };
+
+  /* ---- 2a. ITERATIVE: resolver contacts each level and follows referrals ---- */
+  if (mode === "iterative") {
+    let skipRoot = false;
+    if (cache && cfg.cacheNS && tldInfo) {
+      const ns = cache.peek("NS", "." + tld);
+      if (ns.state === "valid") {
+        skipRoot = true; res.cachedNS = true;
+        add({ from: "cache", to: "resolver", kind: "cache", label: "NS ." + tld + " cached",
+          title: "Cached referral", desc: `The resolver already has the .${tld} TLD server (${ns.entry.value}) cached (remaining ${Math.ceil(ns.rem)} s), so it skips the Root server.`,
+          ms: 0, effect: () => { ns.entry.hits++; } });
+      }
+    }
+    if (!skipRoot) {
+      add({ from: "resolver", to: "root", kind: "query", label: "A? " + domain,
+        title: "Resolver → Root", desc: `Resolver asks the Root server (.) about ${domain}.`, ms: J(half(cfg.root)) + cfg.proc });
+      if (!tldInfo) {
+        add({ from: "root", to: "resolver", kind: "error", label: "NXDOMAIN",
+          title: "Root → Resolver", desc: `Root: the top-level domain “.${tld}” does not exist. NXDOMAIN.`, ms: J(half(cfg.root)) });
+        return failAndReturn("root");
+      }
+      add({ from: "root", to: "resolver", kind: "referral", label: "Ask ." + tld + " TLD",
+        title: "Root → Resolver (referral)", desc: `Root replies with a referral: “I don’t know ${domain}, ask the .${tld} TLD server ${tldInfo.ns} (${tldInfo.ip}).”`,
+        ms: J(half(cfg.root)),
+        effect: (cache && cfg.cacheNS) ? () => cache.put("NS", "." + tld, tldInfo.ns, cfg.ttlNS) : null });
+    }
+    add({ from: "resolver", to: tldNode, kind: "query", label: "A? " + domain,
+      title: `Resolver → .${tld} TLD`, desc: `Resolver asks the .${tld} TLD server about ${domain}.`, ms: J(half(cfg.tld)) + cfg.proc });
+    if (!zone) {
+      add({ from: tldNode, to: "resolver", kind: "error", label: "NXDOMAIN",
+        title: `.${tld} TLD → Resolver`, desc: `.${tld} TLD: no domain “${zoneName}” is registered. NXDOMAIN.`, ms: J(half(cfg.tld)) });
+      return failAndReturn(tldNode);
+    }
+    add({ from: tldNode, to: "resolver", kind: "referral", label: "Ask authoritative",
+      title: `.${tld} TLD → Resolver (referral)`, desc: `.${tld} TLD replies with a referral: “Ask the authoritative server for ${zoneName}: ${zone.ns} (${zone.ip}).”`,
+      ms: J(half(cfg.tld)) });
+    add({ from: "resolver", to: authNode, kind: "query", label: "A? " + domain,
+      title: "Resolver → Authoritative", desc: `Resolver asks the authoritative server ${zone.ns} for the A record of ${domain}.`, ms: J(half(cfg.auth)) + cfg.proc });
+    if (!ip) {
+      add({ from: authNode, to: "resolver", kind: "error", label: "NXDOMAIN",
+        title: "Authoritative → Resolver", desc: `Authoritative server: zone ${zoneName} has no record “${domain}”. NXDOMAIN.`, ms: J(half(cfg.auth)) });
+      return failAndReturn(authNode);
+    }
+    add({ from: authNode, to: "resolver", kind: "answer", label: "A " + ip,
+      title: "Authoritative → Resolver (answer)", desc: `Authoritative server answers: ${domain} → ${ip}.`, ms: J(half(cfg.auth)), ipAt: authNode });
+    return storeAndReturn();
+  }
+
+  /* ---- 2b. RECURSIVE: each server asks the next and relays the answer back ---- */
+  add({ from: "resolver", to: "root", kind: "query", label: "A? " + domain,
+    title: "Resolver → Root", desc: `Resolver sends a recursive query for ${domain} to the Root server.`, ms: J(half(cfg.root)) + cfg.proc });
+  if (!tldInfo) {
+    add({ from: "root", to: "resolver", kind: "error", label: "NXDOMAIN",
+      title: "Root → Resolver", desc: `Root: the top-level domain “.${tld}” does not exist. NXDOMAIN.`, ms: J(half(cfg.root)) });
+    return failAndReturn("root");
+  }
+  add({ from: "root", to: tldNode, kind: "query", label: "A? " + domain,
+    title: `Root → .${tld} TLD`, desc: `Root forwards the query to the .${tld} TLD server on the resolver’s behalf.`, ms: J(half(cfg.tld)) + cfg.proc });
+  if (!zone) {
+    add({ from: tldNode, to: "root", kind: "error", label: "NXDOMAIN",
+      title: `.${tld} TLD → Root`, desc: `.${tld} TLD: “${zoneName}” is not registered. NXDOMAIN travels back up the chain.`, ms: J(half(cfg.tld)) });
+    add({ from: "root", to: "resolver", kind: "error", label: "NXDOMAIN",
+      title: "Root → Resolver", desc: `Root relays NXDOMAIN back to the resolver.`, ms: J(half(cfg.root)) + cfg.proc });
+    return failAndReturn(tldNode);
+  }
+  add({ from: tldNode, to: authNode, kind: "query", label: "A? " + domain,
+    title: `.${tld} TLD → Authoritative`, desc: `.${tld} TLD forwards the query to the authoritative server ${zone.ns}.`, ms: J(half(cfg.auth)) + cfg.proc });
+  if (!ip) {
+    add({ from: authNode, to: tldNode, kind: "error", label: "NXDOMAIN",
+      title: `Authoritative → .${tld} TLD`, desc: `Authoritative: zone ${zoneName} has no record “${domain}”. NXDOMAIN.`, ms: J(half(cfg.auth)) });
+    add({ from: tldNode, to: "root", kind: "error", label: "NXDOMAIN", title: `.${tld} TLD → Root`, desc: `TLD relays NXDOMAIN to the Root.`, ms: J(half(cfg.tld)) + cfg.proc });
+    add({ from: "root", to: "resolver", kind: "error", label: "NXDOMAIN", title: "Root → Resolver", desc: `Root relays NXDOMAIN to the resolver.`, ms: J(half(cfg.root)) + cfg.proc });
+    return failAndReturn(authNode);
+  }
+  add({ from: authNode, to: tldNode, kind: "answer", label: "A " + ip, ipAt: authNode,
+    title: `Authoritative → .${tld} TLD`, desc: `Authoritative server answers ${domain} → ${ip}; the answer travels back up the chain.`, ms: J(half(cfg.auth)) });
+  add({ from: tldNode, to: "root", kind: "answer", label: "A " + ip,
+    title: `.${tld} TLD → Root`, desc: `.${tld} TLD relays the final answer to the Root.`, ms: J(half(cfg.tld)) + cfg.proc });
+  add({ from: "root", to: "resolver", kind: "answer", label: "A " + ip,
+    title: "Root → Resolver", desc: `Root relays the final answer to the resolver. The resolver never had to follow referrals itself.`, ms: J(half(cfg.root)) + cfg.proc });
+  return storeAndReturn();
+}
+
+/* Theoretical reference times (no jitter) used for the with/without cache comparison */
+function referenceTimes(domain, mode, cfg) {
+  const full = plan(domain, mode, { cache: null, cfg, jitter: false }).total;
+  const hit = Math.round(cfg.client / 2) * 2 + cfg.cache * 2;
+  return { full, hit };
+}
+
+/* =====================================================================
+   4. APP STATE & CONFIG
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+let clockOffset = 0;
+const now = () => Date.now() + clockOffset;
+const cache = new DNSCache(now);
+const log = [];
+let running = false, skipAnim = false, nextResolver = null;
+
+function num(id, def) { const v = parseFloat($(id).value); return Number.isFinite(v) && v >= 0 ? v : def; }
+function getCfg() {
+  return {
+    client: num("dClient", 20), cache: num("dCache", 2), root: num("dRoot", 100), tld: num("dTld", 80),
+    auth: num("dAuth", 120), proc: num("dProc", 5),
+    ttlA: Math.max(1, num("ttlA", 60)), ttlNS: Math.max(1, num("ttlNS", 120)), ttlNeg: Math.max(1, num("ttlNeg", 30)),
+    cacheNS: $("cacheNS").checked
+  };
+}
+const getMode = () => document.querySelector('input[name=mode]:checked').value;
+
+/* =====================================================================
+   5. DIAGRAM
+   ===================================================================== */
+const SVGNS = "http://www.w3.org/2000/svg";
+const NODES = {
+  client:    { x: 75,  y: 290, title: "CLIENT", sub: "browser / user" },
+  resolver:  { x: 235, y: 290, title: "DNS RESOLVER", sub: "local recursive resolver" },
+  cache:     { x: 235, y: 450, title: "CACHE", sub: "resolver memory" },
+  root:      { x: 600, y: 70,  title: "ROOT  ( . )", sub: DB.root.name },
+  "tld-com": { x: 440, y: 225, title: ".com TLD", sub: DB.tlds.com.ns },
+  "tld-org": { x: 600, y: 225, title: ".org TLD", sub: DB.tlds.org.ns },
+  "tld-in":  { x: 760, y: 225, title: ".in TLD",  sub: DB.tlds.in.ns },
+  "auth-com":{ x: 440, y: 420, title: "Authoritative", sub: ".com zones" },
+  "auth-org":{ x: 600, y: 420, title: "Authoritative", sub: ".org zones" },
+  "auth-in": { x: 760, y: 420, title: "Authoritative", sub: ".in zones" }
+};
+const NW = 130, NH = 54;
+const KIND_COLOR = { query: "--pk-query", referral: "--pk-referral", answer: "--pk-answer", error: "--pk-error", cache: "--pk-cache" };
+const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function buildDiagram() {
+  const lv = $("levels");
+  [["ROOT LEVEL", 70], ["TOP-LEVEL DOMAIN (TLD)", 225], ["AUTHORITATIVE", 420]].forEach(([t, y]) => {
+    const tx = el("text", { x: 890, y: y - 36, class: "level-label", "text-anchor": "end" }, lv); tx.textContent = t;
+  });
+  const eg = $("edges");
+  const E = (a, b, cls) => el("line", { x1: NODES[a].x, y1: NODES[a].y, x2: NODES[b].x, y2: NODES[b].y, class: "edge " + (cls || ""), id: `e-${a}-${b}` }, eg);
+  E("client", "resolver"); E("resolver", "cache");
+  E("resolver", "root", "dashed");
+  ["com", "org", "in"].forEach(t => { E("root", "tld-" + t); E("tld-" + t, "auth-" + t); });
+  const ng = $("nodes");
+  for (const id in NODES) {
+    const n = NODES[id];
+    const g = el("g", { class: "node", id: "n-" + id, tabindex: 0, role: "button", "aria-label": n.title + " — show details" }, ng);
+    el("rect", { class: "box", x: n.x - NW / 2, y: n.y - NH / 2, width: NW, height: NH, rx: 10 }, g);
+    el("text", { x: n.x, y: n.y - 3 }, g).textContent = n.title;
+    el("text", { x: n.x, y: n.y + 14, class: "sub" }, g).textContent = n.sub;
+    g.addEventListener("click", () => showNodeInfo(id));
+    g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); showNodeInfo(id); } });
+  }
+}
+function setNodeState(id, state) {
+  const g = $("n-" + id); if (!g) return;
+  g.classList.remove("active", "hit", "fail");
+  if (state) g.classList.add(state);
+  if (state === "active" || state === "hit" || state === "fail") g.classList.add("visited");
+}
+function resetDiagram() {
+  document.querySelectorAll(".node").forEach(g => g.classList.remove("active", "visited", "hit", "fail", "dim"));
+  document.querySelectorAll(".edge").forEach(e => e.classList.remove("lit"));
+  $("trails").innerHTML = ""; $("packets").innerHTML = ""; $("bubbles").innerHTML = "";
+}
+function dimUnused(domain) {
+  const tld = domain.split(".").pop();
+  ["com", "org", "in"].forEach(t => {
+    if (t !== tld) { $("n-tld-" + t).classList.add("dim"); $("n-auth-" + t).classList.add("dim"); }
+  });
+}
+/* path geometry: resolver <-> TLD hops curve below the TLD row so they don't cross other nodes */
+function hopGeometry(a, b) {
+  const A = NODES[a], B = NODES[b];
+  let cx = (A.x + B.x) / 2, cy = (A.y + B.y) / 2;
+  const pair = [a, b].sort().join(",");
+  if (/resolver/.test(pair) && /tld-/.test(pair)) cy += 70;
+  if (/resolver/.test(pair) && /auth-/.test(pair)) cy += 40;
+  if (pair === "cache,resolver") cx += (a === "resolver" ? 26 : -26);
+  if (pair === "client,resolver") cy += (a === "client" ? -14 : 14);
+  return { A, B, cx, cy, point: t => ({ x: (1 - t) * (1 - t) * A.x + 2 * (1 - t) * t * cx + t * t * B.x, y: (1 - t) * (1 - t) * A.y + 2 * (1 - t) * t * cy + t * t * B.y }) };
+}
+function drawTrail(step) {
+  const g = hopGeometry(step.from, step.to);
+  el("path", { d: `M${g.A.x},${g.A.y} Q${g.cx},${g.cy} ${g.B.x},${g.B.y}`, class: "hop-trail", stroke: cssVar(KIND_COLOR[step.kind]) }, $("trails"));
+  const eid = $(`e-${step.from}-${step.to}`) || $(`e-${step.to}-${step.from}`);
+  if (eid) eid.classList.add("lit");
+}
+function showBubble(nodeId, text, nx) {
+  const n = NODES[nodeId];
+  const g = el("g", { class: "ip-bubble" + (nx ? " nx" : "") }, $("bubbles"));
+  const w = Math.max(90, text.length * 7.6 + 16);
+  const y = nodeId === "client" ? n.y + NH / 2 + 8 : n.y + NH / 2 + 6;
+  el("rect", { x: n.x - w / 2, y, width: w, height: 22, rx: 11 }, g);
+  el("text", { x: n.x, y: y + 15 }, g).textContent = text;
+}
+function animateHop(step, speed) {
+  return new Promise(resolve => {
+    if (skipAnim || step.from === step.to) return resolve();
+    const g = hopGeometry(step.from, step.to);
+    const color = cssVar(KIND_COLOR[step.kind]);
+    const pk = el("g", { class: "packet" }, $("packets"));
+    el("circle", { r: 9, fill: color, filter: "url(#glow)" }, pk);
+    const tx = el("text", { y: -14 }, pk); tx.textContent = step.label;
+    const dur = Math.min(2400, Math.max(450, step.ms * 7)) / speed;
+    const t0 = performance.now();
+    const frame = t => {
+      if (skipAnim) { pk.remove(); return resolve(); }
+      const p = Math.min(1, (t - t0) / dur);
+      const e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      const pt = g.point(e);
+      pk.setAttribute("transform", `translate(${pt.x},${pt.y})`);
+      if (p < 1) requestAnimationFrame(frame); else { pk.remove(); resolve(); }
+    };
+    requestAnimationFrame(frame);
+  });
+}
+const pause = ms => new Promise(r => { if (skipAnim) return r(); const t = setTimeout(r, ms); pauseTimer = { t, r }; });
+let pauseTimer = null;
+function waitNext() {
+  if (!$("stepMode").checked || skipAnim) return Promise.resolve();
+  $("nextBtn").disabled = false;
+  return new Promise(r => { nextResolver = () => { $("nextBtn").disabled = true; nextResolver = null; r(); }; });
+}
+
+function showNodeInfo(id) {
+  const box = $("nodeInfo");
+  let html = "";
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  if (id === "client") html = `<b>Client</b> — the user's browser/application. It sends a query to the resolver and waits for the IP address.`;
+  else if (id === "resolver") html = `<b>DNS Resolver</b> — receives the client's query, checks its cache and, on a miss, resolves the name through the hierarchy (${getMode()} mode is selected).`;
+  else if (id === "cache") html = `<b>Resolver cache</b> — currently ${cache.entries().length} entr${cache.entries().length === 1 ? "y" : "ies"}. See the Resolver Cache table below.`;
+  else if (id === "root") html = `<b>Root server</b> <span class="mono">${DB.root.name} (${DB.root.ip})</span> — knows which server is responsible for each TLD:<br>` +
+    Object.entries(DB.tlds).map(([t, v]) => `<span class="mono">.${t} → NS ${v.ns} (${v.ip})</span>`).join("<br>");
+  else if (id.startsWith("tld-")) {
+    const t = id.slice(4), v = DB.tlds[t];
+    html = `<b>.${t} TLD server</b> <span class="mono">${v.ns} (${v.ip})</span> — delegations (simulated):<br>` +
+      Object.entries(v.zones).map(([z, zi]) => `<span class="mono">${esc(z)} → NS ${zi.ns} (${zi.ip})</span>`).join("<br>");
+  } else if (id.startsWith("auth-")) {
+    const t = id.slice(5), v = DB.tlds[t];
+    html = `<b>Authoritative servers for .${t} zones</b> — actual A records (simulated):<br>` +
+      Object.values(v.zones).map(zi => Object.entries(zi.records).map(([n, ip]) => `<span class="mono">${esc(n)}  A  ${ip}</span>`).join("<br>")).join("<br>");
+  }
+  box.innerHTML = html; box.classList.add("show");
+}
+
+/* =====================================================================
+   6. RUNNING A QUERY (animated)
+   ===================================================================== */
+const NODE_NAME = id => ({ client: "Client", resolver: "Resolver", cache: "Cache", root: "Root" }[id] || (id.startsWith("tld-") ? "." + id.slice(4) + " TLD" : "Authoritative"));
+
+function setRunning(v) {
+  running = v;
+  ["resolveBtn", "compareBtn", "benchBtn", "clearCacheBtn"].forEach(b => $(b).disabled = v);
+  document.querySelectorAll("#presets button").forEach(b => b.disabled = v);
+  $("skipBtn").disabled = !v;
+  if (!v) $("nextBtn").disabled = true;
+}
+function statusBadgeHTML(outcome) {
+  return ({
+    HIT: '<span class="badge hit">✔ CACHE HIT</span>',
+    "NEG-HIT": '<span class="badge hit">✔ CACHE HIT (negative)</span> <span class="badge nx">✖ NXDOMAIN</span>',
+    MISS: '<span class="badge miss">✖ CACHE MISS → resolved</span>',
+    "NO-CACHE": '<span class="badge nocache">Cache disabled → resolved</span>',
+    NXDOMAIN: '<span class="badge nx">✖ DNS Resolution Failed / NXDOMAIN</span>'
+  })[outcome] || "";
+}
+
+async function runQuery(rawDomain, overrides = {}) {
+  if (running) return null;
+  const domain = normalizeDomain(rawDomain);
+  $("inputErr").textContent = "";
+  if (!validDomain(domain)) {
+    $("inputErr").textContent = "Please enter a valid domain name such as example.com (letters, digits, hyphens, and a TLD).";
+    return null;
+  }
+  $("domain").value = domain;
+  const mode = overrides.mode || getMode();
+  const cfg = getCfg();
+  const useCache = overrides.cacheOn !== undefined ? overrides.cacheOn : $("cacheOn").checked;
+  const r = plan(domain, mode, { cache: useCache ? cache : null, cfg, jitter: $("jitter").checked });
+  const ref = referenceTimes(domain, mode, cfg);
+
+  setRunning(true); skipAnim = false;
+  resetDiagram(); dimUnused(domain);
+  $("timeline").innerHTML = "";
+  $("statusBadge").innerHTML = '<span class="badge nocache">Resolving…</span>';
+  $("modeBadge").innerHTML = `<span class="badge ${mode === "recursive" ? "rec" : "itr"}">${mode.toUpperCase()}</span>` + (useCache ? "" : ' <span class="badge nocache">NO CACHE</span>');
+  const bc = $("breadcrumb"); bc.innerHTML = "";
+  const addChip = (text, cls) => {
+    if (bc.children.length) { const a = document.createElement("span"); a.className = "arr"; a.textContent = "→"; bc.appendChild(a); }
+    const c = document.createElement("span"); c.className = "chip " + (cls || "on"); c.textContent = text; bc.appendChild(c);
+  };
+  addChip("Client");
+  setNodeState("client", "active");
+  const speed = parseFloat($("speed").value) || 1;
+
+  for (const s of r.steps) {
+    setNodeState(s.from, "active");
+    $("narration").innerHTML = `<b>${s.title}:</b> ${s.desc}`;
+    await animateHop(s, speed);
+    drawTrail(s);
+    if (s.effect) s.effect();
+    renderCache(s.kind === "cache" && /STORE/.test(s.label) ? s.domainKey || r.domain : null);
+    setNodeState(s.from, s.from === "client" ? null : null);
+    $(`n-${s.from}`).classList.add("visited");
+    const st = s.badge === "hit" ? "hit" : (s.kind === "error" ? "fail" : "active");
+    setNodeState(s.to, st);
+    if (s.ipAt) showBubble(s.ipAt, s.label.replace(/^A /, ""), false);
+    $("simClock").innerHTML = `${s.t} <small>ms simulated</small>`;
+    const chipCls = s.badge === "hit" ? "hit" : s.badge === "miss" ? "miss" : s.kind === "error" && s.to !== "client" ? "err" : "on";
+    if (s.label === "CACHE HIT" || s.label === "CACHE MISS") addChip(s.label, chipCls);
+    else if (s.label === "STORE") addChip("Store in cache", "on");
+    else if (s.label === "STORE NX") addChip("Cache NXDOMAIN", "on");
+    else if (s.to === "client") addChip(s.kind === "answer" ? "Client ← " + s.label : "Client ← NXDOMAIN", s.kind === "answer" ? "hit" : "err");
+    else if (s.from !== "cache" && s.to !== "cache") addChip(NODE_NAME(s.to) + (s.kind === "referral" ? " (referral)" : s.kind === "error" ? " ✖" : ""), chipCls);
+    else if (/NS \./.test(s.label)) addChip("Cached ." + domain.split(".").pop() + " NS (skip Root)", "hit");
+    appendTimeline(s);
+    if (!skipAnim) { await pause(180 / speed); await waitNext(); }
+  }
+  showBubble("client", r.ip || "NXDOMAIN", !r.ip);
+  setNodeState("client", r.ip ? "hit" : "fail");
+  $("statusBadge").innerHTML = statusBadgeHTML(r.outcome);
+  const expl = mode === "recursive"
+    ? "In recursive resolution, the resolver obtains the final answer on behalf of the client."
+    : "In iterative resolution, the resolver contacts each DNS level and follows the referrals until it reaches the authoritative answer.";
+  $("narration").innerHTML = (r.outcome === "HIT" || r.outcome === "NEG-HIT")
+    ? `<b>Done in ${r.total} ms (simulated).</b> Answer served from the resolver cache — the Root, TLD and authoritative servers were not contacted.`
+    : `<b>Done in ${r.total} ms (simulated).</b> ${expl}`;
+
+  const entry = {
+    id: log.length + 1, time: new Date(now()), domain, mode, cacheOn: useCache, outcome: r.outcome, ip: r.ip,
+    ms: r.total, full: ref.full, hit: ref.hit, messages: r.messages, ttlLeft: r.ttlLeft, cachedNS: r.cachedNS,
+    path: [r.steps[0].from, ...r.steps.map(s => s.to)].map(NODE_NAME).filter((v, i, a) => v !== a[i - 1]).join(" → ")
+  };
+  log.push(entry);
+  renderResult(entry); renderLog(); renderAnalysis(); renderCache();
+  setRunning(false);
+  return entry;
+}
+
+function appendTimeline(s) {
+  const tl = $("timeline");
+  const d = document.createElement("div"); d.className = "tl-item";
+  d.innerHTML = `<span class="t">+${s.ms} ms<br><b>${s.t}</b></span><span class="dot" style="--c:var(${KIND_COLOR[s.kind]})"></span><span><b></b><br><span class="msg"></span></span>`;
+  const spans = d.children[2];
+  spans.querySelector("b").textContent = s.title;
+  spans.querySelector(".msg").textContent = s.desc;
+  tl.appendChild(d); tl.scrollTop = tl.scrollHeight;
+}
+
+/* =====================================================================
+   7. RENDERING: result, cache, log, analysis
+   ===================================================================== */
+function renderResult(e) {
+  const max = Math.max(e.full, e.ms, 1);
+  const isHit = e.outcome === "HIT" || e.outcome === "NEG-HIT";
+  const saved = e.full - e.ms;
+  $("resultBox").innerHTML = `
+    <div style="margin-bottom:10px">${statusBadgeHTML(e.outcome)} <span class="badge ${e.mode === "recursive" ? "rec" : "itr"}">${e.mode.toUpperCase()}</span></div>
+    <div class="result-main">
+      <div class="kv"><div class="k">Domain</div><div class="v mono">${e.domain}</div></div>
+      <div class="kv"><div class="k">${isHit ? "Cached IP" : "IP Address"}</div><div class="v mono" style="color:${e.ip ? "var(--good)" : "var(--bad)"}">${e.ip || "NXDOMAIN"}</div></div>
+      <div class="kv"><div class="k">Response time</div><div class="v">${e.ms} ms</div></div>
+      <div class="kv"><div class="k">${isHit ? "Remaining TTL" : "Cached with TTL"}</div><div class="v">${isHit ? Math.ceil(e.ttlLeft) + " s" : (e.cacheOn ? (e.ip ? getCfg().ttlA : getCfg().ttlNeg) + " s" : "not cached")}</div></div>
+      <div class="kv"><div class="k">Messages</div><div class="v">${e.messages}</div></div>
+    </div>
+    <h3>Response time: with vs without cache <span style="text-transform:none;font-weight:400">(simulated)</span></h3>
+    <div class="compare-bars">
+      <div class="cbar"><span>Without cache (full lookup)</span><div class="track"><div class="fill" style="width:${e.full / max * 100}%;background:var(--series-2)"></div></div><span class="val">${e.full} ms</span></div>
+      <div class="cbar"><span>With cache (cache hit)</span><div class="track"><div class="fill" style="width:${Math.max(1, e.hit / max * 100)}%;background:var(--series-1)"></div></div><span class="val">${e.hit} ms</span></div>
+      <div class="cbar"><span><b>This query (actual)</b></span><div class="track"><div class="fill" style="width:${Math.max(1, e.ms / max * 100)}%;background:var(--text-2)"></div></div><span class="val">${e.ms} ms</span></div>
+    </div>
+    <p class="explain">${isHit
+      ? `Served from cache: <b>${saved} ms faster</b> than a full lookup (${(e.full / Math.max(e.ms, 1)).toFixed(1)}× speed-up).`
+      : e.cacheOn
+        ? `Cache miss: the full hierarchy was queried. ${e.ip ? `The record is now cached — repeat this query within ${getCfg().ttlA} s to get a cache hit (~${e.hit} ms, ${(e.full / e.hit).toFixed(1)}× faster).` : "The negative answer is cached."}`
+        : `Caching is disabled, so every query pays the full ${e.full} ms. With caching enabled a repeat query would take ~${e.hit} ms.`}
+      ${e.cachedNS ? " The .TLD referral came from cache, so the Root server was skipped." : ""}
+      <br><span class="hint">Times are simulated network delays (see “Simulated network delays”), not real internet measurements.</span></p>`;
+}
+
+let lastFlash = null;
+function fmtTime(ms) { const d = new Date(ms); return d.toLocaleTimeString([], { hour12: false }); }
+function renderCache(flashName) {
+  if (flashName) lastFlash = { name: flashName, at: Date.now() };
+  const rows = cache.entries().sort((a, b) => b.stored - a.stored);
+  $("cacheCount").textContent = `${rows.length} entr${rows.length === 1 ? "y" : "ies"} · ${rows.filter(e => cache.remaining(e) > 0).length} valid`;
+  const body = $("cacheBody");
+  if (!rows.length) { body.innerHTML = `<tr><td colspan="9" class="keep" style="color:var(--muted)">Cache is empty — every query will be a cache miss.</td></tr>`; return; }
+  body.innerHTML = "";
+  rows.forEach(e => {
+    const rem = cache.remaining(e);
+    const valid = rem > 0;
+    const tr = document.createElement("tr");
+    if (!valid) tr.className = "expired";
+    if (lastFlash && lastFlash.name === e.name && Date.now() - lastFlash.at < 300) tr.classList.add("flash");
+    const pct = Math.max(0, Math.min(100, rem / e.ttl * 100));
+    tr.innerHTML = `<td class="mono"></td><td>${e.type}</td><td class="mono"></td><td class="num">${e.ttl} s</td>
+      <td class="keep"><span class="ttlbar"><i style="width:${pct}%;background:${pct < 25 ? "var(--warn)" : "var(--good)"}"></i></span><b>${valid ? Math.ceil(rem) + " s" : "0 s"}</b></td>
+      <td>${fmtTime(e.stored)}</td><td class="num">${e.hits}</td>
+      <td class="keep">${valid ? '<span class="badge hit">✔ VALID</span>' : '<span class="badge nx">⌛ EXPIRED</span>'}</td>
+      <td class="keep"><button class="small" data-act="expire">Expire</button> <button class="small danger" data-act="del">Delete</button></td>`;
+    tr.children[0].textContent = e.name; tr.children[2].textContent = e.value;
+    tr.querySelector('[data-act=expire]').onclick = () => { e.forceExpired = true; renderCache(); };
+    tr.querySelector('[data-act=del]').onclick = () => { cache.remove(e.type, e.name); renderCache(); };
+    tr._entry = e;
+    body.appendChild(tr);
+  });
+}
+/* Live TTL countdown: update cells in place so buttons stay clickable */
+function tickCache() {
+  const body = $("cacheBody");
+  const rows = [...body.querySelectorAll("tr")].filter(tr => tr._entry);
+  if (rows.length !== cache.entries().length || rows.some(tr => !cache.map.has(cache.key(tr._entry.type, tr._entry.name)) || cache.map.get(cache.key(tr._entry.type, tr._entry.name)) !== tr._entry)) return renderCache();
+  let validCount = 0;
+  for (const tr of rows) {
+    const e = tr._entry, rem = cache.remaining(e), valid = rem > 0, pct = Math.max(0, Math.min(100, rem / e.ttl * 100));
+    if (valid) validCount++;
+    if (tr.classList.contains("expired") === valid) return renderCache();
+    const i = tr.children[4].querySelector("i");
+    i.style.width = pct + "%"; i.style.background = pct < 25 ? "var(--warn)" : "var(--good)";
+    tr.children[4].querySelector("b").textContent = valid ? Math.ceil(rem) + " s" : "0 s";
+    tr.children[6].textContent = e.hits;
+  }
+  $("cacheCount").textContent = `${rows.length} entr${rows.length === 1 ? "y" : "ies"} · ${validCount} valid`;
+}
+
+function outcomeBadge(o) {
+  return { HIT: '<span class="badge hit">HIT</span>', "NEG-HIT": '<span class="badge hit">HIT (NX)</span>', MISS: '<span class="badge miss">MISS</span>', "NO-CACHE": '<span class="badge nocache">NO CACHE</span>', NXDOMAIN: '<span class="badge nx">NXDOMAIN</span>' }[o];
+}
+function renderLog() {
+  $("logCount").textContent = `${log.length} quer${log.length === 1 ? "y" : "ies"}`;
+  const body = $("logBody");
+  if (!log.length) { body.innerHTML = `<tr><td colspan="12" style="color:var(--muted)">No queries yet.</td></tr>`; return; }
+  body.innerHTML = "";
+  [...log].reverse().forEach(e => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="num">${e.id}</td><td>${fmtTime(e.time)}</td><td class="mono"></td><td>${e.mode}</td><td>${e.cacheOn ? "on" : "off"}</td>
+      <td>${outcomeBadge(e.outcome)}</td><td class="mono">${e.ip || "—"}</td><td class="num"><b>${e.ms} ms</b></td><td class="num">${e.full} ms</td><td class="num">${e.hit} ms</td><td class="num">${e.messages}</td><td style="color:var(--text-2)"></td>`;
+    tr.children[2].textContent = e.domain; tr.children[11].textContent = e.path;
+    body.appendChild(tr);
+  });
+}
+const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+function renderAnalysis() {
+  const hits = log.filter(e => e.outcome === "HIT" || e.outcome === "NEG-HIT");
+  const misses = log.filter(e => e.outcome === "MISS" || e.outcome === "NO-CACHE" || e.outcome === "NXDOMAIN");
+  const cached = log.filter(e => e.cacheOn);
+  const ratio = cached.length ? hits.length / cached.length * 100 : 0;
+  const aHit = avg(hits.map(e => e.ms)), aMiss = avg(misses.map(e => e.ms));
+  const saved = log.reduce((s, e) => s + (e.full - e.ms), 0);
+  const tiles = [
+    ["Total queries", log.length, `${log.filter(e => e.mode === "recursive").length} recursive · ${log.filter(e => e.mode === "iterative").length} iterative`],
+    ["Cache hits", hits.length, `${misses.length} misses / uncached`],
+    ["Hit ratio", cached.length ? ratio.toFixed(0) + "%" : "—", "of queries with cache on"],
+    ["Avg. with cache hit", hits.length ? aHit.toFixed(0) + " ms" : "—", "response time"],
+    ["Avg. full lookup", misses.length ? aMiss.toFixed(0) + " ms" : "—", "miss / no cache"],
+    ["Speed-up", hits.length && misses.length ? (aMiss / Math.max(aHit, 1)).toFixed(1) + "×" : "—", "miss ÷ hit"],
+    ["Time saved", saved + " ms", "vs. no caching at all"],
+    ["Avg. response", log.length ? avg(log.map(e => e.ms)).toFixed(0) + " ms" : "—", "all queries"]
+  ];
+  $("tiles").innerHTML = tiles.map(([k, v, d]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join("");
+  const last = log.slice(-12);
+  barChart($("chartPerQuery"), {
+    categories: last.map(e => "#" + e.id),
+    catLabels: last.map(e => `#${e.id} ${e.domain} (${e.outcome})`),
+    series: [{ name: "Without cache", color: "--series-2", values: last.map(e => e.full) },
+             { name: "Actual", color: "--series-1", values: last.map(e => e.ms) }],
+    empty: "Resolve a few domains (repeat one to get a cache hit) to see the comparison."
+  });
+}
+
+/* ---- Minimal SVG grouped bar chart with hover tooltips ---- */
+const tip = $("tooltip");
+function showTip(ev, head, rows) {
+  tip.innerHTML = "";
+  const h = document.createElement("div"); h.className = "tk"; h.textContent = head; tip.appendChild(h);
+  rows.forEach(([name, val, color]) => {
+    const r = document.createElement("div");
+    r.innerHTML = `<span class="ln" style="background:var(${color})"></span><span class="tv"></span> <span class="tk"></span>`;
+    r.querySelector(".tv").textContent = val; r.querySelector("span.tk").textContent = name; tip.appendChild(r);
+  });
+  const x = Math.min(window.innerWidth - 220, ev.clientX + 12), y = ev.clientY + 12;
+  tip.style.left = x + "px"; tip.style.top = y + "px"; tip.style.opacity = 1;
+}
+const hideTip = () => tip.style.opacity = 0;
+function barChart(container, { categories, catLabels, series, empty }) {
+  container.innerHTML = "";
+  if (!categories.length) { container.innerHTML = `<div class="empty-chart">${empty}</div>`; return; }
+  const W = 560, H = 220, L = 44, R = 8, T = 10, B = 26;
+  const max = Math.max(1, ...series.flatMap(s => s.values));
+  const nice = (() => { const p = Math.pow(10, Math.floor(Math.log10(max))); const m = max / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; })();
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" }, container);
+  const y = v => T + (H - T - B) * (1 - v / nice);
+  for (let i = 0; i <= 4; i++) {
+    const v = nice * i / 4;
+    el("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), class: "grid" }, svg);
+    const t = el("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end", class: "axis" }, svg); t.textContent = Math.round(v) + (i === 4 ? " ms" : "");
+  }
+  const gw = (W - L - R) / categories.length;
+  const bw = Math.min(22, (gw - 8) / series.length - 2);
+  categories.forEach((c, i) => {
+    const gx = L + i * gw + (gw - (bw + 2) * series.length) / 2;
+    const hit = el("rect", { x: L + i * gw, y: T, width: gw, height: H - T - B, fill: "transparent", tabindex: 0, class: "bar" }, svg);
+    series.forEach((s, j) => {
+      const v = s.values[i], x = gx + j * (bw + 2), top = y(v), base = y(0), h = Math.max(1, base - top), r = Math.min(4, h, bw / 2);
+      el("path", { d: `M${x},${base} V${base - h + r} Q${x},${base - h} ${x + r},${base - h} H${x + bw - r} Q${x + bw},${base - h} ${x + bw},${base - h + r} V${base} Z`, fill: cssVar(s.color), "pointer-events": "none" }, svg);
+    });
+    const lab = el("text", { x: L + i * gw + gw / 2, y: H - 8, "text-anchor": "middle", class: "axis" }, svg); lab.textContent = c;
+    const rows = series.map(s => [s.name, s.values[i] + " ms", s.color]);
+    hit.addEventListener("pointermove", ev => showTip(ev, catLabels[i], rows));
+    hit.addEventListener("pointerleave", hideTip);
+    hit.addEventListener("focus", () => { const b = hit.getBoundingClientRect(); showTip({ clientX: b.left + b.width / 2, clientY: b.top }, catLabels[i], rows); });
+    hit.addEventListener("blur", hideTip);
+  });
+}
+
+/* =====================================================================
+   8. BENCHMARK (instant, virtual clock)
+   ===================================================================== */
+function runBenchmark() {
+  const n = Math.min(200, Math.max(5, Math.round(num("benchN", 30))));
+  const gap = num("benchGap", 3) * 1000;
+  const mode = getMode(), cfg = getCfg(), jitter = $("jitter").checked;
+  const pool = [...PRESETS, ...PRESETS.slice(0, 4), NX_PRESETS[0]]; // popular domains weighted higher
+  const seq = Array.from({ length: n }, () => pool[Math.floor(Math.random() * pool.length)]);
+  const run = useCache => {
+    let vt = 0; const c = new DNSCache(() => vt);
+    const times = []; let hits = 0;
+    seq.forEach(d => {
+      const r = plan(d, mode, { cache: useCache ? c : null, cfg, jitter });
+      r.steps.forEach(s => s.effect && s.effect());
+      times.push(r.total); if (r.outcome === "HIT" || r.outcome === "NEG-HIT") hits++;
+      vt += r.total + gap;
+    });
+    return { times, hits, total: times.reduce((a, b) => a + b, 0) };
+  };
+  const A = run(false), B = run(true);
+  const red = (1 - B.total / A.total) * 100;
+  $("benchOut").innerHTML = `
+    <div class="tiles" style="margin-top:12px">
+      <div class="tile"><div class="k">Total without cache</div><div class="v">${A.total} ms</div><div class="d">avg ${(A.total / n).toFixed(0)} ms / query</div></div>
+      <div class="tile"><div class="k">Total with cache</div><div class="v">${B.total} ms</div><div class="d">avg ${(B.total / n).toFixed(0)} ms / query</div></div>
+      <div class="tile"><div class="k">Cache hit ratio</div><div class="v">${(B.hits / n * 100).toFixed(0)}%</div><div class="d">${B.hits} of ${n} queries</div></div>
+      <div class="tile"><div class="k">Time reduction</div><div class="v">${red.toFixed(0)}%</div><div class="d">${(A.total / Math.max(B.total, 1)).toFixed(1)}× faster overall</div></div>
+    </div>
+    <div class="chart-legend"><span style="--c:var(--series-2)">Without cache</span><span style="--c:var(--series-1)">With cache</span></div>
+    <div class="chart" id="benchChart"></div>
+    <p class="hint">Showing the first ${Math.min(n, 20)} queries (${mode} mode). Sequence: <span style="font-family:ui-monospace,monospace"></span></p>`;
+  $("benchOut").querySelector("p.hint span").textContent = seq.join(", ");
+  const k = Math.min(n, 20);
+  barChart($("benchChart"), {
+    categories: seq.slice(0, k).map((_, i) => String(i + 1)),
+    catLabels: seq.slice(0, k).map((d, i) => `Query ${i + 1}: ${d}`),
+    series: [{ name: "Without cache", color: "--series-2", values: A.times.slice(0, k) },
+             { name: "With cache", color: "--series-1", values: B.times.slice(0, k) }],
+    empty: ""
+  });
+}
+
+/* =====================================================================
+   9. WIRING
+   ===================================================================== */
+function renderPresets() {
+  const p = $("presets");
+  [...PRESETS, ...NX_PRESETS].forEach(d => {
+    const b = document.createElement("button"); b.textContent = d;
+    if (NX_PRESETS.includes(d)) { b.className = "nx"; b.title = "Does not exist — demonstrates NXDOMAIN"; }
+    b.onclick = () => { $("domain").value = d; runQuery(d); };
+    p.appendChild(b);
+  });
+}
+function renderRecords() {
+  $("records").innerHTML = Object.entries(DB.tlds).map(([t, v]) =>
+    `<div class="zone"><h4>.${t} — authoritative records</h4>${Object.values(v.zones).map(z => Object.entries(z.records).map(([n, ip]) =>
+      `<div class="r"><span class="mono">${n}</span><span class="mono">${ip}</span></div>`).join("")).join("")}</div>`).join("") +
+    `<div class="zone"><h4>Not found (NXDOMAIN demo)</h4><div class="r"><span class="mono">unknown-site.com</span><span>fails at .com TLD</span></div><div class="r"><span class="mono">mysite.xyz</span><span>fails at Root</span></div><div class="r"><span class="mono">ftp.example.com</span><span>fails at Authoritative</span></div></div>`;
+}
+function updateModeHint() {
+  $("modeHint").innerHTML = getMode() === "recursive"
+    ? "<b>Recursive:</b> the resolver obtains the final answer on behalf of the client — the query is passed down the chain and the answer comes back up."
+    : "<b>Iterative:</b> the resolver contacts each level itself; Root and TLD reply with a referral (“ask this server next”).";
+}
+
+$("resolveBtn").onclick = () => runQuery($("domain").value);
+$("domain").addEventListener("keydown", e => { if (e.key === "Enter") runQuery($("domain").value); });
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener("change", updateModeHint));
+$("clearCacheBtn").onclick = () => { cache.clear(); renderCache(); $("narration").innerHTML = "<b>Cache cleared.</b> The next query for any domain will be a cache miss."; };
+$("ffBtn").onclick = () => { clockOffset += 30000; $("clockOffset").textContent = clockOffset / 1000 + " s"; renderCache(); };
+$("nextBtn").onclick = () => nextResolver && nextResolver();
+$("skipBtn").onclick = () => { skipAnim = true; if (nextResolver) nextResolver(); if (pauseTimer) { clearTimeout(pauseTimer.t); pauseTimer.r(); } };
+$("stepMode").onchange = () => { if (!$("stepMode").checked && nextResolver) nextResolver(); };
+$("compareBtn").onclick = async () => {
+  const d = $("domain").value;
+  const first = await runQuery(d, { cacheOn: false });
+  if (!first) return;
+  $("narration").innerHTML = "<b>Step 1 of 2 done (cache disabled).</b> Now resolving again with the cache enabled…";
+  // make sure the record is in cache, then resolve again with cache on
+  const cfg = getCfg(), dom = normalizeDomain(d);
+  if (cache.lookupName(dom).state !== "valid") {
+    const warm = plan(dom, getMode(), { cache, cfg, jitter: false }); warm.steps.forEach(s => s.effect && s.effect());
+  }
+  await new Promise(r => setTimeout(r, 900));
+  const second = await runQuery(d, { cacheOn: true });
+  if (second) $("narration").innerHTML = `<b>Comparison:</b> without cache <b>${first.ms} ms</b> vs with cache <b>${second.ms} ms</b> — caching is <b>${(first.ms / Math.max(second.ms, 1)).toFixed(1)}× faster</b> (${first.ms - second.ms} ms saved, simulated).`;
+};
+$("benchBtn").onclick = runBenchmark;
+$("clearLogBtn").onclick = () => { log.length = 0; renderLog(); renderAnalysis(); };
+$("exportBtn").onclick = () => {
+  const head = ["id", "time", "domain", "mode", "cache", "result", "ip", "response_ms", "without_cache_ms", "with_cache_hit_ms", "messages", "path"];
+  const rows = log.map(e => [e.id, e.time.toISOString(), e.domain, e.mode, e.cacheOn ? "on" : "off", e.outcome, e.ip || "NXDOMAIN", e.ms, e.full, e.hit, e.messages, e.path]);
+  const csv = [head, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "dns_query_log.csv"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$("themeBtn").onclick = () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("dns-sim-theme", root.dataset.theme); } catch (e) {}
+  renderAnalysis();
+};
+try { const t = localStorage.getItem("dns-sim-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+buildDiagram(); renderPresets(); renderRecords(); updateModeHint();
+renderCache(); renderLog(); renderAnalysis();
+setInterval(tickCache, 500);
+
+/* expose for testing/demo from the console */
+window.DNSSim = { plan, DNSCache, cache, log, runQuery, normalizeDomain, validDomain };
+</script>
+</body>
+</html>
