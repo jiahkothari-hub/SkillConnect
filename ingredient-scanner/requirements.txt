@@ -7,3 +7,7 @@ requests>=2.31      # dataset download
 PyYAML>=6.0         # configs/data_config.yaml
 matplotlib>=3.8     # EDA figures
 pytest>=8.0         # tests
+
+# Optional: run the notebook and verify Hugging Face compatibility
+datasets>=2.18      # Dataset.from_json(...) on the split files
+jupyter>=1.0

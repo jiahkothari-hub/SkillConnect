@@ -57,45 +57,44 @@ Second source: the **Open Food Facts additive taxonomy** (pinned GitHub commit) 
 with English names, synonyms and functional classes. INS and E numbers share one numbering system
 (INS 330 = E330 = citric acid), so one table serves both notations.
 
-## 3. Proposed entity schema (to be finalised in Stage 3)
+## 3. Entity schema (final: 10 labels)
 
-The suggested 12-label schema mixes two different questions:
-*"what is this mention?"* (sugar, fat, additive, code) and *"what job does this additive do?"*
-(preservative, colour, emulsifier, ...). The second question causes overlaps that annotators cannot
-resolve consistently:
+The original suggestion mixed two questions: *what is this mention?* and *what job does this additive
+do?* The second question causes overlaps, because citric acid is an antioxidant, a sequestrant and an
+acidity regulator at once. The team decided to keep **PRESERVATIVE** and **COLOUR** as their own NER labels
+(they matter most to consumers and are lexically distinctive), and to handle every other function through
+the `FUNCTION_CLASS` span plus linking.
 
-* Many additives have several functions (OFF lists citric acid as antioxidant **and** sequestrant;
-  Codex also lists it as an acidity regulator). One span cannot carry three BIO labels.
-* The function is often **written on the label itself**: "Acidity regulator (INS 330)". The text
-  "acidity regulator" is the function; "INS 330" is the substance.
-* Function classes are rare and unbalanced (sweetener ≈7% of products, flavour enhancer ≈2%), which
-  makes per-class F1 unstable on a small gold test set.
+| Label | Examples |
+|---|---|
+| `SUGAR` | sugar, glucose syrup, dextrose, honey, jaggery |
+| `SWEETENER` | sucralose, aspartame, sorbitol, steviol glycosides |
+| `FAT` | palm oil, refined palmolein, ghee, cocoa butter |
+| `PRESERVATIVE` | sodium benzoate, potassium sorbate, sulphur dioxide |
+| `COLOUR` | tartrazine, caramel colour, Red 40, annatto |
+| `ADDITIVE` | citric acid, soy lecithin, xanthan gum, mono- and diglycerides |
+| `INS_CODE` | INS 330, E330, (471), 503(ii) |
+| `FUNCTION_CLASS` | acidity regulator, emulsifier, preservative, colour |
+| `FLAVOURING` | natural flavour, nature-identical flavouring substances |
+| `INGREDIENT` | wheat flour, milk solids, salt, water |
 
-Proposal — **8 mutually exclusive span labels** (NER = identification), with the functional class
-looked up afterwards from the reference table (entity linking = interpretation):
+**How PRESERVATIVE / COLOUR / ADDITIVE are separated without guesswork:** a named substance takes its label
+from its INS number. The INS system groups numbers by main function (100–199 colours, 200–299
+preservatives, …). The exceptions are listed in `configs/lexicons/additive_label_rules.yaml`, e.g. acids
+260–297 are ADDITIVE and calcium carbonate 170 is ADDITIVE. The word "preservative" or "colour" on a
+label is `FUNCTION_CLASS`, never PRESERVATIVE/COLOUR.
 
-| Label | Annotate | Examples |
-|---|---|---|
-| `SUGAR` | sugars and syrups added for sweetness | sugar, glucose syrup, dextrose, invert sugar syrup, honey, jaggery |
-| `SWEETENER` | non-sugar sweeteners, incl. polyols | sucralose, aspartame, steviol glycosides, sorbitol |
-| `FAT` | oils and fats | palm oil, refined palmolein, hydrogenated vegetable fat, cocoa butter, ghee |
-| `ADDITIVE` | a named substance that has an INS/E number | citric acid, soy lecithin, xanthan gum, tartrazine, Red 40 |
-| `INS_CODE` | an additive code in any notation | INS 330, E330, E 150d, (330), 503(ii) |
-| `FUNCTION_CLASS` | the functional class name written on the label | acidity regulator, emulsifier, preservative, colour, raising agent |
-| `FLAVOURING` | flavourings | natural flavour, nature-identical flavouring substances |
-| `INGREDIENT` | any other food ingredient | wheat flour, milk solids, tomato paste, salt, water |
-
-Overlap policy (one rule, in priority order): `INS_CODE` > `SWEETENER` > `SUGAR` > `FAT` >
-`FLAVOURING` > `ADDITIVE` > `FUNCTION_CLASS` > `INGREDIENT`. Example: "Acidity regulator (INS 330)"
-→ `FUNCTION_CLASS` + `INS_CODE`; the app then explains *INS 330 → citric acid → acidity regulator*.
+Overlap priority: `INS_CODE` > `SWEETENER` > `SUGAR` > `FAT` > `FLAVOURING` >
+`PRESERVATIVE`/`COLOUR`/`ADDITIVE` (by number) > `FUNCTION_CLASS` > `INGREDIENT`.
+Full rules: `reports/entity_schema.md`.
 
 Three layers, kept separate on purpose:
 
 | Layer | Example | Who |
 |---|---|---|
 | Identification | "INS 330" is an `INS_CODE` | NER (Person 1 baseline, Person 2 models) |
-| Interpretation | INS 330 = citric acid, used as an acidity regulator | entity linking (Person 3), reference table (Person 1) |
-| Health claim | "this is bad for you" | **out of scope** — the system never makes one |
+| Interpretation | INS 330 = citric acid, declared as "acidity regulator" | `src/labeling/interpret.py`, Person 3's knowledge base |
+| Health claim | "this is bad for you" | **out of scope**: the system never makes one |
 
 ## 4. Annotation strategy
 
@@ -115,10 +114,10 @@ Three layers, kept separate on purpose:
 
 | Stage | Deliverable | Status |
 |---|---|---|
-| 1 | Folder structure, download, filtering, taxonomy, EDA | **done** |
-| 2 | Preprocessing (`process_ingredient_text`), tokenisation with character offsets, validation checks | next |
-| 3 | Entity schema + guideline, dictionaries, regex rules, weak labeller, silver dataset, entity-label EDA | |
-| 4 | Gold sampling, Doccano export/import, agreement script — **then the team annotates** | |
-| 5 | Grouped (leakage-free) train/validation/test split, HF-ready files, `label2id.json` | |
-| 6 | Dictionary baseline evaluated on gold test: overall + per-class P/R/F1 | needs gold |
-| 7 | Error analysis CSV and limitations section | needs gold |
+| 1 | Folder structure, download, filtering, taxonomy, EDA | done |
+| 2 | Preprocessing (`process_ingredient_text`), tokenisation with character offsets, validation checks | done |
+| 3 | Entity schema + guideline, dictionaries, regex rules, weak labeller, silver dataset, entity-label EDA | done |
+| 4 | Gold sampling, Doccano export/import, agreement script | tooling done: **the team now annotates** |
+| 5 | Grouped (leakage-free) train/validation/test split, HF-ready files, `label2id.json` | done |
+| 6 | Dictionary baseline evaluated on gold test: overall + per-class P/R/F1 | code done: run after gold |
+| 7 | Error analysis CSV and limitations section | code done: run after gold |

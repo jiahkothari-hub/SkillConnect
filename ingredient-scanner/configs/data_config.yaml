@@ -51,3 +51,25 @@ outputs:
   candidates: data/interim/off_english_candidates.csv.gz
   filter_log: reports/filter_log.json
   products: data/processed/products.csv
+
+gold:
+  # Human-verified GOLD sample, drawn from each split so the gold test set stays held out.
+  # Sizes are products. ~400 products x ~17 entities = ~6,800 entities to check (~2-3 min/product
+  # with pre-annotations, i.e. about 6-7 hours per annotator).
+  sizes:
+    train: 220
+    validation: 60
+    test: 120
+  agreement_items: 40        # extra train items annotated by ALL annotators (inter-annotator agreement)
+  annotators: [annotator_1, annotator_2, annotator_3]   # replace with your names
+  # Enrichment: share of each split's sample reserved for hard / rare cases (rest is stratified random
+  # by market x length). Without it, rare classes (SWEETENER, PRESERVATIVE) would have too few test
+  # examples for a meaningful per-class F1.
+  enrich:
+    has_ins_code: 0.10
+    has_preservative: 0.08
+    has_colour: 0.08
+    has_sweetener: 0.08
+    multiple_sugars: 0.06
+    multiple_fats: 0.06
+    noisy_text: 0.08
