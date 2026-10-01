@@ -1061,7 +1061,9 @@ async function runQuery(rawDomain, overrides = {}) {
   const r = plan(domain, mode, { cache: useCache ? cache : null, cfg, jitter: $("jitter").checked, world });
   const ref = referenceTimes(domain, mode, cfg, world);
   const info = world.names[domain] || {};
-  if (K.fallback) $("inputErr").textContent = `Live DNS lookup unavailable (${K.error}). Using offline simulated records for this query.`;
+  if (K.fallback) $("inputErr").textContent = `Live DNS lookup unavailable (${K.error}), so offline simulated records are used for this query. ` +
+    `This usually means the page is open inside a preview panel or sandbox that blocks internet requests, or there is no internet connection. ` +
+    `To use live data, save index.html and open it directly in Chrome, Edge or Firefox (double-click the file).`;
 
   resetDiagram(); labelDiagram(domain, world); dimUnused(domain);
   $("timeline").innerHTML = "";
