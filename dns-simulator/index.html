@@ -257,6 +257,8 @@ tr.flash td { animation: flash 1.2s ease-out; }
 .node-info { margin-top: 10px; font-size: 12.5px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: none; }
 .node-info.show { display: block; }
 .node-info .mono { font-family: ui-monospace, Menlo, monospace; }
+.source-box { margin-top: 10px; font-size: 12.5px; color: var(--text-2); background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.mono { font-family: ui-monospace, Menlo, monospace; }
 .err-msg { color: var(--bad); font-size: 12px; margin-top: 6px; min-height: 16px; }
 .theme-toggle { font-size: 12px; }
 </style>
@@ -268,7 +270,7 @@ tr.flash td { animation: flash 1.2s ease-out; }
     <p>Interactive simulation of the DNS hierarchy, recursive &amp; iterative resolution, TTL-based caching and response-time analysis.</p>
   </div>
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <div class="sim-note"><b>Simulation:</b> all DNS records, server names and network delays are <b>simulated</b> locally in JavaScript. They are not measurements of real internet DNS servers.</div>
+    <div class="sim-note"><b>Simulation:</b> the resolver, cache, hierarchy walk and all <b>network delays are simulated</b> in JavaScript. In <i>Live</i> mode the DNS records themselves (IPs, name servers) are real, fetched via DNS-over-HTTPS; in <i>Offline</i> mode they are simulated.</div>
     <button class="theme-toggle small" id="themeBtn" title="Toggle light/dark theme">Theme</button>
   </div>
 </header>
@@ -285,6 +287,14 @@ tr.flash td { animation: flash 1.2s ease-out; }
     </div>
     <div class="err-msg" id="inputErr"></div>
     <div class="presets" id="presets" aria-label="Preset domains"></div>
+    <p class="hint">You can type <b>any</b> domain, e.g. <span class="mono">nmims.in</span>, <span class="mono">bershka.in</span>, <span class="mono">amazon.co.uk</span>.</p>
+
+    <h3>DNS Data Source</h3>
+    <div class="seg" role="radiogroup" aria-label="DNS data source">
+      <label><input type="radio" name="src" value="live" checked> Live DNS data</label>
+      <label><input type="radio" name="src" value="offline"> Offline simulated</label>
+    </div>
+    <p class="hint" id="srcHint"></p>
 
     <h3>Query Type</h3>
     <div class="seg" role="radiogroup" aria-label="Query type">
@@ -416,7 +426,7 @@ tr.flash td { animation: flash 1.2s ease-out; }
   </h2>
   <div class="table-wrap log-scroll">
     <table>
-      <thead><tr><th>#</th><th>Time</th><th>Domain</th><th>Mode</th><th>Cache</th><th>Result</th><th>IP Address</th><th>Response</th><th>Without cache</th><th>With cache (hit)</th><th>Messages</th><th>Path</th></tr></thead>
+      <thead><tr><th>#</th><th>Time</th><th>Domain</th><th>Mode</th><th>Cache</th><th>Result</th><th>IP Address</th><th>Response</th><th>Without cache</th><th>With cache (hit)</th><th>Messages</th><th>Source</th><th>Path</th></tr></thead>
       <tbody id="logBody"></tbody>
     </table>
   </div>
@@ -438,8 +448,8 @@ tr.flash td { animation: flash 1.2s ease-out; }
     <p class="explain"><b>How the simulation models them:</b> In <b>recursive</b> mode the query travels Resolver → Root → TLD → Authoritative and the answer travels back the same chain. In <b>iterative</b> mode the resolver sends three separate queries and receives two referrals and one answer. Each server adds processing time every time it handles a message, so recursive is slightly slower here, and with NS caching iterative can skip the Root entirely.</p>
   </section>
   <section class="card" aria-labelledby="zhdr">
-    <h2 id="zhdr">Simulated DNS Records</h2>
-    <p class="hint" style="margin-top:-4px">Fictional/example data used by the simulator. IPs are illustrative, not live lookups.</p>
+    <h2 id="zhdr">DNS Records Used</h2>
+    <p class="hint" style="margin-top:-4px" id="recordsHint"></p>
     <div class="records-grid" id="records"></div>
   </section>
 </div>
@@ -476,8 +486,138 @@ const DB = {
       } }
   }
 };
-const PRESETS = ["example.com", "google.com", "openai.com", "college.in", "wikipedia.org", "www.example.com", "github.com", "mozilla.org", "library.college.in"];
-const NX_PRESETS = ["unknown-site.com", "mysite.xyz"];
+const PRESETS = ["example.com", "google.com", "openai.com", "wikipedia.org", "nmims.in", "iitb.ac.in", "www.example.com", "github.com", "college.in"];
+const NX_PRESETS = ["no-such-site-dns-demo.com", "mysite.fake"];
+
+/* =====================================================================
+   1b. DNS KNOWLEDGE (works for ANY domain)
+   The hierarchy needs three facts per query: does the TLD exist (and who
+   serves it), does the zone exist (and who is authoritative), and what is
+   the A record. They come from one of two sources:
+     LIVE    - real DNS data fetched over DNS-over-HTTPS (Google Public
+               DNS, Cloudflare as backup). Real IPs, real name servers.
+     OFFLINE - the built-in records above, plus deterministic generated
+               records for any other domain under a known TLD.
+   Network DELAYS are always simulated, whichever source supplies the data.
+   ===================================================================== */
+const KNOWN_TLDS = new Set(("com org net in edu gov mil int io co ai app dev info biz me tv cc us uk de fr jp cn au ca br ru it es nl se no fi dk ch at be pl pt ie nz za sg hk kr tw id my th vn ph pk bd lk np ae sa qa eg ng ke " +
+  "xyz online site store shop tech blog cloud live news club space website page art design global world today").split(" "));
+/* second-level public suffixes: under these the registered zone has three labels (iitb.ac.in, bbc.co.uk) */
+const SLD_SUFFIXES = new Set(["ac.in", "co.in", "net.in", "org.in", "edu.in", "res.in", "gov.in", "nic.in", "firm.in", "gen.in", "ind.in",
+  "co.uk", "ac.uk", "org.uk", "gov.uk", "com.au", "net.au", "org.au", "edu.au", "co.jp", "ne.jp", "ac.jp", "com.br", "com.cn", "com.sg", "edu.sg", "co.nz", "co.za", "com.mx"]);
+function splitDomain(d) {
+  const labels = d.split(".");
+  const tld = labels[labels.length - 1];
+  const last2 = labels.slice(-2).join(".");
+  const zone = labels.length >= 3 && SLD_SUFFIXES.has(last2) ? labels.slice(-3).join(".") : last2;
+  return { tld, zone };
+}
+const emptyStore = () => ({ tlds: {}, zones: {}, names: {} });
+const STORES = { live: emptyStore(), offline: emptyStore() };
+/* seed the offline store with the built-in simulated records */
+for (const [t, tv] of Object.entries(DB.tlds)) {
+  STORES.offline.tlds[t] = { exists: true, ns: tv.ns, ip: tv.ip, source: "builtin" };
+  for (const [z, zv] of Object.entries(tv.zones)) {
+    STORES.offline.zones[z] = { exists: true, ns: zv.ns, ip: zv.ip, source: "builtin" };
+    for (const [n, ip] of Object.entries(zv.records)) STORES.offline.names[n] = { exists: true, ip, source: "builtin" };
+  }
+}
+STORES.offline.zones["no-such-site-dns-demo.com"] = { exists: false, source: "builtin" };
+
+function hash32(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+/* generated addresses use the documentation ranges (RFC 5737) so they are obviously not real */
+function genIP(seed) { const h = hash32(seed); return ["192.0.2", "198.51.100", "203.0.113"][h % 3] + "." + (1 + (h >>> 8) % 254); }
+
+function ensureOffline(d) {
+  const S = STORES.offline, { tld, zone } = splitDomain(d);
+  if (!S.tlds[tld]) S.tlds[tld] = KNOWN_TLDS.has(tld)
+    ? { exists: true, ns: `a.nic.${tld}.sim`, ip: genIP("tld:" + tld), source: "generated" }
+    : { exists: false, source: "generated" };
+  if (S.tlds[tld].exists && !S.zones[zone]) S.zones[zone] = { exists: true, ns: `ns1.${zone}.sim`, ip: genIP("ns:" + zone), source: "generated" };
+  const z = S.zones[zone];
+  if (z && z.exists && !S.names[d]) S.names[d] = z.source === "builtin"
+    ? { exists: false, reason: "NXDOMAIN", source: "builtin" }         // built-in zones are complete: unknown names do not exist
+    : { exists: true, ip: genIP(d), source: "generated" };
+  return S;
+}
+
+/* ---- DNS-over-HTTPS (JSON API) ---- */
+const DOH = [
+  (n, t) => fetch(`https://dns.google/resolve?name=${encodeURIComponent(n)}&type=${t}`),
+  (n, t) => fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(n)}&type=${t}`, { headers: { accept: "application/dns-json" } })
+];
+let dohIndex = 0;
+async function doh(name, type) {
+  let lastErr;
+  for (let i = 0; i < DOH.length; i++) {
+    const idx = (dohIndex + i) % DOH.length;
+    try {
+      const r = await Promise.race([DOH[idx](name, type), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 6000))]);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json();
+      dohIndex = idx;
+      return j;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error("DNS-over-HTTPS unavailable");
+}
+const strip = s => String(s || "").replace(/\.$/, "");
+const firstOf = (j, type, section = "Answer") => ((j && j[section]) || []).find(r => r.type === type);
+function nsFrom(j) {
+  const a = firstOf(j, 2) || firstOf(j, 2, "Authority");
+  if (a) return strip(a.data);
+  const soa = firstOf(j, 6, "Authority") || firstOf(j, 6);
+  return soa ? strip(String(soa.data).split(" ")[0]) : "unknown";
+}
+async function ipOf(host) {
+  if (!host || host === "unknown") return "—";
+  try { const j = await doh(host, "A"); const a = firstOf(j, 1); return a ? a.data : "—"; } catch (e) { return "—"; }
+}
+async function ensureLive(d) {
+  const S = STORES.live, { tld, zone } = splitDomain(d);
+  if (S.names[d] && S.tlds[tld] && (S.zones[zone] || !S.tlds[tld].exists)) return S;
+  const t0 = performance.now();
+  const [tj, zj, aj] = await Promise.all([
+    S.tlds[tld] ? null : doh(tld, "NS"),
+    S.zones[zone] ? null : doh(zone, "NS"),
+    doh(d, "A")
+  ]);
+  const jobs = [];
+  if (tj) {
+    const info = S.tlds[tld] = tj.Status === 3 ? { exists: false, source: "live" } : { exists: true, ns: nsFrom(tj), ip: "…", source: "live" };
+    if (info.exists) jobs.push(ipOf(info.ns).then(ip => info.ip = ip));
+  }
+  if (zj) {
+    const info = S.zones[zone] = zj.Status === 3 ? { exists: false, source: "live" } : { exists: true, ns: nsFrom(zj), ip: "…", source: "live" };
+    if (info.exists) jobs.push(ipOf(info.ns).then(ip => info.ip = ip));
+  }
+  await Promise.all(jobs);
+  const As = ((aj && aj.Answer) || []).filter(r => r.type === 1);
+  const cname = ((aj && aj.Answer) || []).filter(r => r.type === 5).map(r => strip(r.data));
+  S.names[d] = As.length
+    ? { exists: true, ip: As[0].data, all: As.map(r => r.data), realTTL: As[0].TTL, cname, source: "live" }
+    : { exists: false, reason: aj.Status === 3 ? "NXDOMAIN" : aj.Status === 0 ? "no A record (NODATA)" : "SERVFAIL", source: "live" };
+  /* keep the hierarchy consistent with the answer */
+  if (S.names[d].exists) {
+    if (!S.tlds[tld].exists) S.tlds[tld] = { exists: true, ns: "unknown", ip: "—", source: "live" };
+    if (!S.zones[zone] || !S.zones[zone].exists) S.zones[zone] = { exists: true, ns: "unknown", ip: "—", source: "live" };
+  }
+  S.names[d].fetchMs = Math.round(performance.now() - t0);
+  return S;
+}
+const getSource = () => document.querySelector('input[name=src]:checked').value;
+/* Returns the knowledge store to resolve this domain with. Live lookups fall back to offline data on network failure. */
+async function ensureKnowledge(d, source = getSource()) {
+  if (source === "live") {
+    try { return { world: await ensureLive(d), source: "live" }; }
+    catch (e) { return { world: ensureOffline(d), source: "offline", fallback: true, error: e.message }; }
+  }
+  return { world: ensureOffline(d), source: "offline" };
+}
+
+/* the diagram has fixed slots for .com/.org/.in and one slot that takes any other TLD */
+const slotOf = tld => (["com", "org", "in"].includes(tld) ? tld : "x");
+let slotTld = { com: "com", org: "org", in: "in", x: "net" };
 
 /* =====================================================================
    2. CACHE (TTL-aware). Uses an injectable clock so the benchmark can
@@ -517,7 +657,7 @@ class DNSCache {
    exactly when that message is delivered (animated or instant).
    ===================================================================== */
 function normalizeDomain(raw) {
-  let d = String(raw || "").trim().toLowerCase();
+  let d = String(raw || "").replace(/\s+/g, "").toLowerCase();
   d = d.replace(/^[a-z]+:\/\//, "").split(/[\/?#:]/)[0].replace(/\.$/, "");
   return d;
 }
@@ -539,13 +679,15 @@ function plan(domain, mode, opts) {
     if (s.from !== s.to) messages++;
     steps.push(s); return s;
   };
-  const labels = domain.split(".");
-  const tld = labels[labels.length - 1];
-  const zoneName = labels.slice(-2).join(".");
-  const tldInfo = DB.tlds[tld];
-  const zone = tldInfo && tldInfo.zones[zoneName];
-  const ip = zone && zone.records[domain];
-  const tldNode = "tld-" + tld, authNode = "auth-" + tld;
+  const { tld, zone: zoneName } = splitDomain(domain);
+  const W = opts.world || ensureOffline(domain);
+  const tInfo = W.tlds[tld], zInfo = W.zones[zoneName], nInfo = W.names[domain];
+  const tldInfo = tInfo && tInfo.exists ? tInfo : null;
+  const zone = zInfo && zInfo.exists ? zInfo : null;
+  const ip = zone && nInfo && nInfo.exists ? nInfo.ip : null;
+  const via = nInfo && nInfo.cname && nInfo.cname.length ? ` (via CNAME ${nInfo.cname.join(" → ")})` : "";
+  const nxWhy = nInfo && nInfo.reason && nInfo.reason !== "NXDOMAIN" ? nInfo.reason : "NXDOMAIN";
+  const tldNode = "tld-" + slotOf(tld), authNode = "auth-" + slotOf(tld);
   const res = { domain, mode, cacheOn: !!cache, steps, outcome: null, ip: null, failedAt: null, ttlLeft: null, cachedNS: false };
 
   add({ from: "client", to: "resolver", kind: "query", label: "A? " + domain,
@@ -641,11 +783,11 @@ function plan(domain, mode, opts) {
       title: "Resolver → Authoritative", desc: `Resolver asks the authoritative server ${zone.ns} for the A record of ${domain}.`, ms: J(half(cfg.auth)) + cfg.proc });
     if (!ip) {
       add({ from: authNode, to: "resolver", kind: "error", label: "NXDOMAIN",
-        title: "Authoritative → Resolver", desc: `Authoritative server: zone ${zoneName} has no record “${domain}”. NXDOMAIN.`, ms: J(half(cfg.auth)) });
+        title: "Authoritative → Resolver", desc: `Authoritative server: zone ${zoneName} has no A record for “${domain}”. ${nxWhy}.`, ms: J(half(cfg.auth)) });
       return failAndReturn(authNode);
     }
     add({ from: authNode, to: "resolver", kind: "answer", label: "A " + ip,
-      title: "Authoritative → Resolver (answer)", desc: `Authoritative server answers: ${domain} → ${ip}.`, ms: J(half(cfg.auth)), ipAt: authNode });
+      title: "Authoritative → Resolver (answer)", desc: `Authoritative server answers: ${domain} → ${ip}${via}.`, ms: J(half(cfg.auth)), ipAt: authNode });
     return storeAndReturn();
   }
 
@@ -670,13 +812,13 @@ function plan(domain, mode, opts) {
     title: `.${tld} TLD → Authoritative`, desc: `.${tld} TLD forwards the query to the authoritative server ${zone.ns}.`, ms: J(half(cfg.auth)) + cfg.proc });
   if (!ip) {
     add({ from: authNode, to: tldNode, kind: "error", label: "NXDOMAIN",
-      title: `Authoritative → .${tld} TLD`, desc: `Authoritative: zone ${zoneName} has no record “${domain}”. NXDOMAIN.`, ms: J(half(cfg.auth)) });
+      title: `Authoritative → .${tld} TLD`, desc: `Authoritative: zone ${zoneName} has no A record for “${domain}”. ${nxWhy}.`, ms: J(half(cfg.auth)) });
     add({ from: tldNode, to: "root", kind: "error", label: "NXDOMAIN", title: `.${tld} TLD → Root`, desc: `TLD relays NXDOMAIN to the Root.`, ms: J(half(cfg.tld)) + cfg.proc });
     add({ from: "root", to: "resolver", kind: "error", label: "NXDOMAIN", title: "Root → Resolver", desc: `Root relays NXDOMAIN to the resolver.`, ms: J(half(cfg.root)) + cfg.proc });
     return failAndReturn(authNode);
   }
   add({ from: authNode, to: tldNode, kind: "answer", label: "A " + ip, ipAt: authNode,
-    title: `Authoritative → .${tld} TLD`, desc: `Authoritative server answers ${domain} → ${ip}; the answer travels back up the chain.`, ms: J(half(cfg.auth)) });
+    title: `Authoritative → .${tld} TLD`, desc: `Authoritative server answers ${domain} → ${ip}${via}; the answer travels back up the chain.`, ms: J(half(cfg.auth)) });
   add({ from: tldNode, to: "root", kind: "answer", label: "A " + ip,
     title: `.${tld} TLD → Root`, desc: `.${tld} TLD relays the final answer to the Root.`, ms: J(half(cfg.tld)) + cfg.proc });
   add({ from: "root", to: "resolver", kind: "answer", label: "A " + ip,
@@ -685,8 +827,8 @@ function plan(domain, mode, opts) {
 }
 
 /* Theoretical reference times (no jitter) used for the with/without cache comparison */
-function referenceTimes(domain, mode, cfg) {
-  const full = plan(domain, mode, { cache: null, cfg, jitter: false }).total;
+function referenceTimes(domain, mode, cfg, world) {
+  const full = plan(domain, mode, { cache: null, cfg, jitter: false, world }).total;
   const hit = Math.round(cfg.client / 2) * 2 + cfg.cache * 2;
   return { full, hit };
 }
@@ -720,15 +862,17 @@ const NODES = {
   client:    { x: 75,  y: 290, title: "CLIENT", sub: "browser / user" },
   resolver:  { x: 235, y: 290, title: "DNS RESOLVER", sub: "local recursive resolver" },
   cache:     { x: 235, y: 450, title: "CACHE", sub: "resolver memory" },
-  root:      { x: 600, y: 70,  title: "ROOT  ( . )", sub: DB.root.name },
-  "tld-com": { x: 440, y: 225, title: ".com TLD", sub: DB.tlds.com.ns },
-  "tld-org": { x: 600, y: 225, title: ".org TLD", sub: DB.tlds.org.ns },
-  "tld-in":  { x: 760, y: 225, title: ".in TLD",  sub: DB.tlds.in.ns },
-  "auth-com":{ x: 440, y: 420, title: "Authoritative", sub: ".com zones" },
-  "auth-org":{ x: 600, y: 420, title: "Authoritative", sub: ".org zones" },
-  "auth-in": { x: 760, y: 420, title: "Authoritative", sub: ".in zones" }
+  root:      { x: 590, y: 70,  title: "ROOT  ( . )", sub: "root servers" },
+  "tld-com": { x: 380, y: 225, title: ".com TLD", sub: ".com registry" },
+  "tld-org": { x: 520, y: 225, title: ".org TLD", sub: ".org registry" },
+  "tld-in":  { x: 660, y: 225, title: ".in TLD",  sub: ".in registry" },
+  "tld-x":   { x: 800, y: 225, title: "any other TLD", sub: ".net .io .edu .uk …" },
+  "auth-com":{ x: 380, y: 420, title: "Authoritative", sub: ".com zones" },
+  "auth-org":{ x: 520, y: 420, title: "Authoritative", sub: ".org zones" },
+  "auth-in": { x: 660, y: 420, title: "Authoritative", sub: ".in zones" },
+  "auth-x":  { x: 800, y: 420, title: "Authoritative", sub: "other zones" }
 };
-const NW = 130, NH = 54;
+const NW = 126, NH = 54;
 const KIND_COLOR = { query: "--pk-query", referral: "--pk-referral", answer: "--pk-answer", error: "--pk-error", cache: "--pk-cache" };
 const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
@@ -740,21 +884,21 @@ function el(tag, attrs, parent) {
 }
 function buildDiagram() {
   const lv = $("levels");
-  [["ROOT LEVEL", 70], ["TOP-LEVEL DOMAIN (TLD)", 225], ["AUTHORITATIVE", 420]].forEach(([t, y]) => {
-    const tx = el("text", { x: 890, y: y - 36, class: "level-label", "text-anchor": "end" }, lv); tx.textContent = t;
+  [["ROOT", 70], ["TLD", 225], ["AUTHORITATIVE", 420]].forEach(([t, y]) => {
+    const tx = el("text", { x: 889, y, class: "level-label", "text-anchor": "middle", transform: `rotate(-90 889 ${y})` }, lv); tx.textContent = t;
   });
   const eg = $("edges");
   const E = (a, b, cls) => el("line", { x1: NODES[a].x, y1: NODES[a].y, x2: NODES[b].x, y2: NODES[b].y, class: "edge " + (cls || ""), id: `e-${a}-${b}` }, eg);
   E("client", "resolver"); E("resolver", "cache");
   E("resolver", "root", "dashed");
-  ["com", "org", "in"].forEach(t => { E("root", "tld-" + t); E("tld-" + t, "auth-" + t); });
+  ["com", "org", "in", "x"].forEach(t => { E("root", "tld-" + t); E("tld-" + t, "auth-" + t); });
   const ng = $("nodes");
   for (const id in NODES) {
     const n = NODES[id];
     const g = el("g", { class: "node", id: "n-" + id, tabindex: 0, role: "button", "aria-label": n.title + " — show details" }, ng);
     el("rect", { class: "box", x: n.x - NW / 2, y: n.y - NH / 2, width: NW, height: NH, rx: 10 }, g);
-    el("text", { x: n.x, y: n.y - 3 }, g).textContent = n.title;
-    el("text", { x: n.x, y: n.y + 14, class: "sub" }, g).textContent = n.sub;
+    el("text", { x: n.x, y: n.y - 3, id: "t-" + id }, g).textContent = n.title;
+    el("text", { x: n.x, y: n.y + 14, class: "sub", id: "s-" + id }, g).textContent = n.sub;
     g.addEventListener("click", () => showNodeInfo(id));
     g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); showNodeInfo(id); } });
   }
@@ -771,18 +915,29 @@ function resetDiagram() {
   $("trails").innerHTML = ""; $("packets").innerHTML = ""; $("bubbles").innerHTML = "";
 }
 function dimUnused(domain) {
-  const tld = domain.split(".").pop();
-  ["com", "org", "in"].forEach(t => {
-    if (t !== tld) { $("n-tld-" + t).classList.add("dim"); $("n-auth-" + t).classList.add("dim"); }
+  const slot = slotOf(splitDomain(domain).tld);
+  ["com", "org", "in", "x"].forEach(t => {
+    if (t !== slot) { $("n-tld-" + t).classList.add("dim"); $("n-auth-" + t).classList.add("dim"); }
   });
 }
-/* path geometry: resolver <-> TLD hops curve below the TLD row so they don't cross other nodes */
+const short = (s, n = 21) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s || "");
+/* show the real server names involved in this query on the diagram */
+function labelDiagram(domain, world) {
+  const { tld, zone } = splitDomain(domain), slot = slotOf(tld);
+  slotTld[slot] = tld;
+  const t = world.tlds[tld], z = world.zones[zone];
+  $("t-tld-" + slot).textContent = "." + tld + " TLD";
+  $("s-tld-" + slot).textContent = t && t.exists ? short(t.ns) : "does not exist";
+  $("s-auth-" + slot).textContent = z && z.exists ? short(z.ns) : (t && t.exists ? "no such zone" : "—");
+  $("s-root").textContent = world === STORES.live ? "a–m.root-servers.net" : "a.root-servers.sim";
+}
+/* path geometry for packet animation (quadratic curve) */
 function hopGeometry(a, b) {
   const A = NODES[a], B = NODES[b];
   let cx = (A.x + B.x) / 2, cy = (A.y + B.y) / 2;
   const pair = [a, b].sort().join(",");
-  if (/resolver/.test(pair) && /tld-/.test(pair)) cy += 70;
-  if (/resolver/.test(pair) && /auth-/.test(pair)) cy += 40;
+  /* resolver <-> TLD/auth hops travel along the gap between the rows, then turn into the server */
+  if (/resolver/.test(pair) && /(tld|auth)-/.test(pair)) { const S = a === "resolver" ? B : A; cx = S.x; cy = 300; }
   if (pair === "cache,resolver") cx += (a === "resolver" ? 26 : -26);
   if (pair === "client,resolver") cy += (a === "client" ? -14 : 14);
   return { A, B, cx, cy, point: t => ({ x: (1 - t) * (1 - t) * A.x + 2 * (1 - t) * t * cx + t * t * B.x, y: (1 - t) * (1 - t) * A.y + 2 * (1 - t) * t * cy + t * t * B.y }) };
@@ -833,20 +988,28 @@ function waitNext() {
 function showNodeInfo(id) {
   const box = $("nodeInfo");
   let html = "";
-  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   if (id === "client") html = `<b>Client</b> — the user's browser/application. It sends a query to the resolver and waits for the IP address.`;
   else if (id === "resolver") html = `<b>DNS Resolver</b> — receives the client's query, checks its cache and, on a miss, resolves the name through the hierarchy (${getMode()} mode is selected).`;
   else if (id === "cache") html = `<b>Resolver cache</b> — currently ${cache.entries().length} entr${cache.entries().length === 1 ? "y" : "ies"}. See the Resolver Cache table below.`;
-  else if (id === "root") html = `<b>Root server</b> <span class="mono">${DB.root.name} (${DB.root.ip})</span> — knows which server is responsible for each TLD:<br>` +
-    Object.entries(DB.tlds).map(([t, v]) => `<span class="mono">.${t} → NS ${v.ns} (${v.ip})</span>`).join("<br>");
-  else if (id.startsWith("tld-")) {
-    const t = id.slice(4), v = DB.tlds[t];
-    html = `<b>.${t} TLD server</b> <span class="mono">${v.ns} (${v.ip})</span> — delegations (simulated):<br>` +
-      Object.entries(v.zones).map(([z, zi]) => `<span class="mono">${esc(z)} → NS ${zi.ns} (${zi.ip})</span>`).join("<br>");
-  } else if (id.startsWith("auth-")) {
-    const t = id.slice(5), v = DB.tlds[t];
-    html = `<b>Authoritative servers for .${t} zones</b> — actual A records (simulated):<br>` +
-      Object.values(v.zones).map(zi => Object.entries(zi.records).map(([n, ip]) => `<span class="mono">${esc(n)}  A  ${ip}</span>`).join("<br>")).join("<br>");
+  else {
+    const W = STORES[getSource()], src = getSource() === "live" ? "live DNS data" : "simulated data";
+    if (id === "root") {
+      const ts = Object.entries(W.tlds).filter(([, v]) => v.exists);
+      html = `<b>Root server (.)</b> — knows which server is responsible for each TLD. Known so far (${src}):<br>` +
+        (ts.length ? ts.map(([t, v]) => `<span class="mono">.${esc(t)} → NS ${esc(v.ns)} (${esc(v.ip)})</span>`).join("<br>") : "<i>nothing looked up yet</i>");
+    } else {
+      const slot = id.split("-")[1], t = slotTld[slot];
+      const zones = Object.entries(W.zones).filter(([z, v]) => v.exists && z.split(".").pop() === t);
+      if (id.startsWith("tld-")) {
+        const v = W.tlds[t];
+        html = `<b>.${esc(t)} TLD server</b> ${v && v.exists ? `<span class="mono">${esc(v.ns)} (${esc(v.ip)})</span>` : ""} — delegations known so far (${src}):<br>` +
+          (zones.length ? zones.map(([z, zi]) => `<span class="mono">${esc(z)} → NS ${esc(zi.ns)} (${esc(zi.ip)})</span>`).join("<br>") : "<i>none yet</i>");
+      } else {
+        const names = Object.entries(W.names).filter(([n, v]) => v.exists && splitDomain(n).tld === t);
+        html = `<b>Authoritative servers for .${esc(t)} zones</b> — A records known so far (${src}):<br>` +
+          (names.length ? names.map(([n, v]) => `<span class="mono">${esc(n)}  A  ${esc(v.ip)}</span>`).join("<br>") : "<i>none yet</i>");
+      }
+    }
   }
   box.innerHTML = html; box.classList.add("show");
 }
@@ -854,11 +1017,12 @@ function showNodeInfo(id) {
 /* =====================================================================
    6. RUNNING A QUERY (animated)
    ===================================================================== */
-const NODE_NAME = id => ({ client: "Client", resolver: "Resolver", cache: "Cache", root: "Root" }[id] || (id.startsWith("tld-") ? "." + id.slice(4) + " TLD" : "Authoritative"));
+const NODE_NAME = id => ({ client: "Client", resolver: "Resolver", cache: "Cache", root: "Root" }[id] || (id.startsWith("tld-") ? "." + slotTld[id.slice(4)] + " TLD" : "Authoritative"));
 
 function setRunning(v) {
   running = v;
   ["resolveBtn", "compareBtn", "benchBtn", "clearCacheBtn"].forEach(b => $(b).disabled = v);
+  document.querySelectorAll('input[name=src]').forEach(r => r.disabled = v);
   document.querySelectorAll("#presets button").forEach(b => b.disabled = v);
   $("skipBtn").disabled = !v;
   if (!v) $("nextBtn").disabled = true;
@@ -885,11 +1049,21 @@ async function runQuery(rawDomain, overrides = {}) {
   const mode = overrides.mode || getMode();
   const cfg = getCfg();
   const useCache = overrides.cacheOn !== undefined ? overrides.cacheOn : $("cacheOn").checked;
-  const r = plan(domain, mode, { cache: useCache ? cache : null, cfg, jitter: $("jitter").checked });
-  const ref = referenceTimes(domain, mode, cfg);
 
   setRunning(true); skipAnim = false;
-  resetDiagram(); dimUnused(domain);
+  const needsFetch = getSource() === "live" && !STORES.live.names[domain];
+  if (needsFetch) {
+    $("statusBadge").innerHTML = '<span class="badge nocache">Fetching live DNS data…</span>';
+    $("narration").innerHTML = `Looking up the real DNS records for <b>${domain}</b> (TLD, name servers and A record) over DNS-over-HTTPS…`;
+  }
+  const K = await ensureKnowledge(domain);
+  const world = K.world;
+  const r = plan(domain, mode, { cache: useCache ? cache : null, cfg, jitter: $("jitter").checked, world });
+  const ref = referenceTimes(domain, mode, cfg, world);
+  const info = world.names[domain] || {};
+  if (K.fallback) $("inputErr").textContent = `Live DNS lookup unavailable (${K.error}). Using offline simulated records for this query.`;
+
+  resetDiagram(); labelDiagram(domain, world); dimUnused(domain);
   $("timeline").innerHTML = "";
   $("statusBadge").innerHTML = '<span class="badge nocache">Resolving…</span>';
   $("modeBadge").innerHTML = `<span class="badge ${mode === "recursive" ? "rec" : "itr"}">${mode.toUpperCase()}</span>` + (useCache ? "" : ' <span class="badge nocache">NO CACHE</span>');
@@ -938,10 +1112,11 @@ async function runQuery(rawDomain, overrides = {}) {
   const entry = {
     id: log.length + 1, time: new Date(now()), domain, mode, cacheOn: useCache, outcome: r.outcome, ip: r.ip,
     ms: r.total, full: ref.full, hit: ref.hit, messages: r.messages, ttlLeft: r.ttlLeft, cachedNS: r.cachedNS,
+    source: K.source, fallback: !!K.fallback, fetchMs: needsFetch ? info.fetchMs : null, allIPs: info.all, cname: info.cname, realTTL: info.realTTL, reason: info.reason,
     path: [r.steps[0].from, ...r.steps.map(s => s.to)].map(NODE_NAME).filter((v, i, a) => v !== a[i - 1]).join(" → ")
   };
   log.push(entry);
-  renderResult(entry); renderLog(); renderAnalysis(); renderCache();
+  renderResult(entry); renderLog(); renderAnalysis(); renderCache(); renderRecords();
   setRunning(false);
   return entry;
 }
@@ -984,9 +1159,25 @@ function renderResult(e) {
         ? `Cache miss: the full hierarchy was queried. ${e.ip ? `The record is now cached — repeat this query within ${getCfg().ttlA} s to get a cache hit (~${e.hit} ms, ${(e.full / e.hit).toFixed(1)}× faster).` : "The negative answer is cached."}`
         : `Caching is disabled, so every query pays the full ${e.full} ms. With caching enabled a repeat query would take ~${e.hit} ms.`}
       ${e.cachedNS ? " The .TLD referral came from cache, so the Root server was skipped." : ""}
-      <br><span class="hint">Times are simulated network delays (see “Simulated network delays”), not real internet measurements.</span></p>`;
+      <br><span class="hint">Times are simulated network delays (see “Simulated network delays”), not real internet measurements.</span></p>
+    <div class="source-box">${sourceHTML(e)}</div>`;
 }
 
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function sourceBadge(src) {
+  return src === "live" ? '<span class="badge hit">LIVE DNS</span>' : src === "builtin" ? '<span class="badge rec">BUILT-IN</span>' : '<span class="badge miss">GENERATED</span>';
+}
+function sourceHTML(e) {
+  if (e.source === "live") {
+    return `<b>Record source:</b> ${sourceBadge("live")} real DNS data from Google/Cloudflare public DNS (DNS-over-HTTPS).` +
+      (e.allIPs && e.allIPs.length > 1 ? ` All A records: <span class="mono">${e.allIPs.map(esc).join(", ")}</span>.` : "") +
+      (e.cname && e.cname.length ? ` CNAME chain: <span class="mono">${e.cname.map(esc).join(" → ")}</span>.` : "") +
+      (e.realTTL != null ? ` Real TTL published by the domain: ${e.realTTL} s (the simulator uses your configured TTL).` : "") +
+      (e.reason && !e.ip ? ` Lookup result: ${esc(e.reason)}.` : "") +
+      (e.fetchMs != null ? `<br><span class="hint">Fetching this data took ${e.fetchMs} ms of real time; that is not part of the simulated response time.</span>` : "");
+  }
+  return `<b>Record source:</b> ${e.fallback ? "live lookup failed, so " : ""}${sourceBadge("generated")} offline simulated data. Built-in examples use fixed records; any other domain under a known TLD gets a generated address in the RFC 5737 documentation range (192.0.2.x / 198.51.100.x / 203.0.113.x).`;
+}
 let lastFlash = null;
 function fmtTime(ms) { const d = new Date(ms); return d.toLocaleTimeString([], { hour12: false }); }
 function renderCache(flashName) {
@@ -1039,13 +1230,13 @@ function outcomeBadge(o) {
 function renderLog() {
   $("logCount").textContent = `${log.length} quer${log.length === 1 ? "y" : "ies"}`;
   const body = $("logBody");
-  if (!log.length) { body.innerHTML = `<tr><td colspan="12" style="color:var(--muted)">No queries yet.</td></tr>`; return; }
+  if (!log.length) { body.innerHTML = `<tr><td colspan="13" style="color:var(--muted)">No queries yet.</td></tr>`; return; }
   body.innerHTML = "";
   [...log].reverse().forEach(e => {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td class="num">${e.id}</td><td>${fmtTime(e.time)}</td><td class="mono"></td><td>${e.mode}</td><td>${e.cacheOn ? "on" : "off"}</td>
-      <td>${outcomeBadge(e.outcome)}</td><td class="mono">${e.ip || "—"}</td><td class="num"><b>${e.ms} ms</b></td><td class="num">${e.full} ms</td><td class="num">${e.hit} ms</td><td class="num">${e.messages}</td><td style="color:var(--text-2)"></td>`;
-    tr.children[2].textContent = e.domain; tr.children[11].textContent = e.path;
+      <td>${outcomeBadge(e.outcome)}</td><td class="mono">${e.ip || "—"}</td><td class="num"><b>${e.ms} ms</b></td><td class="num">${e.full} ms</td><td class="num">${e.hit} ms</td><td class="num">${e.messages}</td><td>${e.source === "live" ? "live" : "offline"}</td><td style="color:var(--text-2)"></td>`;
+    tr.children[2].textContent = e.domain; tr.children[12].textContent = e.path;
     body.appendChild(tr);
   });
 }
@@ -1126,17 +1317,24 @@ function barChart(container, { categories, catLabels, series, empty }) {
 /* =====================================================================
    8. BENCHMARK (instant, virtual clock)
    ===================================================================== */
-function runBenchmark() {
+async function runBenchmark() {
+  if (running) return;
   const n = Math.min(200, Math.max(5, Math.round(num("benchN", 30))));
   const gap = num("benchGap", 3) * 1000;
   const mode = getMode(), cfg = getCfg(), jitter = $("jitter").checked;
-  const pool = [...PRESETS, ...PRESETS.slice(0, 4), NX_PRESETS[0]]; // popular domains weighted higher
+  const looked = [...new Set(log.map(e => e.domain))];
+  const pool = [...PRESETS, ...PRESETS.slice(0, 4), NX_PRESETS[0], ...looked]; // presets (popular ones weighted higher) + domains you queried
   const seq = Array.from({ length: n }, () => pool[Math.floor(Math.random() * pool.length)]);
+  setRunning(true); $("skipBtn").disabled = true;
+  $("benchOut").innerHTML = '<p class="empty-chart">Preparing DNS data for the benchmark domains…</p>';
+  const worlds = {};
+  await Promise.all([...new Set(seq)].map(async d => { worlds[d] = (await ensureKnowledge(d)).world; }));
+  setRunning(false);
   const run = useCache => {
     let vt = 0; const c = new DNSCache(() => vt);
     const times = []; let hits = 0;
     seq.forEach(d => {
-      const r = plan(d, mode, { cache: useCache ? c : null, cfg, jitter });
+      const r = plan(d, mode, { cache: useCache ? c : null, cfg, jitter, world: worlds[d] });
       r.steps.forEach(s => s.effect && s.effect());
       times.push(r.total); if (r.outcome === "HIT" || r.outcome === "NEG-HIT") hits++;
       vt += r.total + gap;
@@ -1173,16 +1371,27 @@ function renderPresets() {
   const p = $("presets");
   [...PRESETS, ...NX_PRESETS].forEach(d => {
     const b = document.createElement("button"); b.textContent = d;
-    if (NX_PRESETS.includes(d)) { b.className = "nx"; b.title = "Does not exist — demonstrates NXDOMAIN"; }
+    if (NX_PRESETS.includes(d)) { b.className = "nx"; b.title = "Does not exist: demonstrates NXDOMAIN"; }
     b.onclick = () => { $("domain").value = d; runQuery(d); };
     p.appendChild(b);
   });
 }
 function renderRecords() {
-  $("records").innerHTML = Object.entries(DB.tlds).map(([t, v]) =>
-    `<div class="zone"><h4>.${t} — authoritative records</h4>${Object.values(v.zones).map(z => Object.entries(z.records).map(([n, ip]) =>
+  const live = getSource() === "live";
+  const W = STORES[getSource()];
+  const lookedHTML = log.length || live
+    ? `<div class="zone" style="grid-column:1/-1"><h4>Domains looked up this session (${live ? "live DNS data" : "offline data"})</h4>` +
+      (Object.entries(W.names).filter(([n]) => log.some(e => e.domain === n)).map(([n, v]) =>
+        `<div class="r"><span class="mono">${esc(n)}</span><span>${v.exists ? `<span class="mono">${esc(v.ip)}</span>` : `<span style="color:var(--bad)">${esc(v.reason || "NXDOMAIN")}</span>`} ${sourceBadge(v.source)}</span></div>`).join("") ||
+        `<p class="hint">Resolve any domain (for example nmims.in or bershka.in) and its records will be listed here.</p>`) + `</div>`
+    : "";
+  $("records").innerHTML = lookedHTML + (live ? "" : Object.entries(DB.tlds).map(([t, v]) =>
+    `<div class="zone"><h4>.${t} — built-in authoritative records</h4>${Object.values(v.zones).map(z => Object.entries(z.records).map(([n, ip]) =>
       `<div class="r"><span class="mono">${n}</span><span class="mono">${ip}</span></div>`).join("")).join("")}</div>`).join("") +
-    `<div class="zone"><h4>Not found (NXDOMAIN demo)</h4><div class="r"><span class="mono">unknown-site.com</span><span>fails at .com TLD</span></div><div class="r"><span class="mono">mysite.xyz</span><span>fails at Root</span></div><div class="r"><span class="mono">ftp.example.com</span><span>fails at Authoritative</span></div></div>`;
+    `<div class="zone"><h4>Not found (NXDOMAIN demo)</h4><div class="r"><span class="mono">no-such-site-dns-demo.com</span><span>fails at .com TLD</span></div><div class="r"><span class="mono">mysite.fake</span><span>fails at Root</span></div><div class="r"><span class="mono">ftp.example.com</span><span>fails at Authoritative</span></div></div>`);
+  $("recordsHint").innerHTML = live
+    ? "<b>Live mode:</b> any domain works. The resolver's knowledge of the Root, TLD and authoritative servers comes from real DNS (DNS-over-HTTPS). Only the network delays are simulated."
+    : "<b>Offline mode:</b> fixed example records below, plus generated addresses for any other domain under a known TLD. Not real IPs.";
 }
 function updateModeHint() {
   $("modeHint").innerHTML = getMode() === "recursive"
@@ -1193,6 +1402,15 @@ function updateModeHint() {
 $("resolveBtn").onclick = () => runQuery($("domain").value);
 $("domain").addEventListener("keydown", e => { if (e.key === "Enter") runQuery($("domain").value); });
 document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener("change", updateModeHint));
+function updateSrcHint() {
+  $("srcHint").innerHTML = getSource() === "live"
+    ? "Real records for <b>any</b> domain are fetched via DNS-over-HTTPS (needs internet). If the lookup fails, the app falls back to offline data automatically."
+    : "No internet needed. Built-in example records, plus generated addresses for any other domain under a known TLD.";
+}
+document.querySelectorAll('input[name=src]').forEach(r => r.addEventListener("change", () => {
+  cache.clear(); renderCache(); updateSrcHint(); renderRecords();
+  $("narration").innerHTML = `<b>Data source changed to ${getSource() === "live" ? "live DNS data" : "offline simulated data"}.</b> The resolver cache was cleared so old answers from the other source are not reused.`;
+}));
 $("clearCacheBtn").onclick = () => { cache.clear(); renderCache(); $("narration").innerHTML = "<b>Cache cleared.</b> The next query for any domain will be a cache miss."; };
 $("ffBtn").onclick = () => { clockOffset += 30000; $("clockOffset").textContent = clockOffset / 1000 + " s"; renderCache(); };
 $("nextBtn").onclick = () => nextResolver && nextResolver();
@@ -1206,7 +1424,8 @@ $("compareBtn").onclick = async () => {
   // make sure the record is in cache, then resolve again with cache on
   const cfg = getCfg(), dom = normalizeDomain(d);
   if (cache.lookupName(dom).state !== "valid") {
-    const warm = plan(dom, getMode(), { cache, cfg, jitter: false }); warm.steps.forEach(s => s.effect && s.effect());
+    const { world } = await ensureKnowledge(dom);
+    const warm = plan(dom, getMode(), { cache, cfg, jitter: false, world }); warm.steps.forEach(s => s.effect && s.effect());
   }
   await new Promise(r => setTimeout(r, 900));
   const second = await runQuery(d, { cacheOn: true });
@@ -1215,8 +1434,8 @@ $("compareBtn").onclick = async () => {
 $("benchBtn").onclick = runBenchmark;
 $("clearLogBtn").onclick = () => { log.length = 0; renderLog(); renderAnalysis(); };
 $("exportBtn").onclick = () => {
-  const head = ["id", "time", "domain", "mode", "cache", "result", "ip", "response_ms", "without_cache_ms", "with_cache_hit_ms", "messages", "path"];
-  const rows = log.map(e => [e.id, e.time.toISOString(), e.domain, e.mode, e.cacheOn ? "on" : "off", e.outcome, e.ip || "NXDOMAIN", e.ms, e.full, e.hit, e.messages, e.path]);
+  const head = ["id", "time", "domain", "mode", "cache", "result", "ip", "response_ms", "without_cache_ms", "with_cache_hit_ms", "messages", "source", "path"];
+  const rows = log.map(e => [e.id, e.time.toISOString(), e.domain, e.mode, e.cacheOn ? "on" : "off", e.outcome, e.ip || "NXDOMAIN", e.ms, e.full, e.hit, e.messages, e.source, e.path]);
   const csv = [head, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "dns_query_log.csv"; a.click();
@@ -1231,12 +1450,12 @@ $("themeBtn").onclick = () => {
 };
 try { const t = localStorage.getItem("dns-sim-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 
-buildDiagram(); renderPresets(); renderRecords(); updateModeHint();
+buildDiagram(); renderPresets(); renderRecords(); updateModeHint(); updateSrcHint();
 renderCache(); renderLog(); renderAnalysis();
 setInterval(tickCache, 500);
 
 /* expose for testing/demo from the console */
-window.DNSSim = { plan, DNSCache, cache, log, runQuery, normalizeDomain, validDomain };
+window.DNSSim = { plan, DNSCache, cache, log, runQuery, normalizeDomain, validDomain, STORES, ensureKnowledge, splitDomain };
 </script>
 </body>
 </html>
