@@ -26,8 +26,8 @@ MODEL_PATH = MODEL_DIR / "crf_model.crfsuite"
 
 
 def word_shape(word: str) -> str:
-    """'INS' -> 'AAA', 'E330' -> 'Add', 'Sugar' -> 'Aa' (runs of the same class collapsed after 2)."""
-    shape = re.sub(r"[A-Z]", "A", re.sub(r"[a-z]", "a", re.sub(r"\d", "d", word)))
+    """'INS' -> 'XX', 'E330' -> 'Xdd', 'Sugar' -> 'Xxx' (X upper, x lower, d digit; runs cut to 2)."""
+    shape = "".join("X" if ch.isupper() else "x" if ch.islower() else "d" if ch.isdigit() else ch for ch in word)
     return re.sub(r"(.)\1{2,}", r"\1\1", shape)
 
 
@@ -75,8 +75,11 @@ class CRFTagger:
         return self.crf.predict([sentence_features(r["tokens"]) for r in records])
 
 
+TRAIN_LIMIT = 8000   # the same seeded 8,000-sentence sample as the Transformer runs (fair comparison)
+
+
 def main():
-    train = load_split("silver", "train")
+    train = load_split("silver", "train", limit=TRAIN_LIMIT)
     print(f"Training CRF on {len(train):,} silver sentences ...", flush=True)
     start = time.time()
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
