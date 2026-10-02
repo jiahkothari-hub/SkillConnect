@@ -12,7 +12,7 @@ Every system is evaluated on the same records with the same scorer. The evaluati
 """
 import random
 
-from src.evaluation.noise_robustness import add_ocr_noise
+from src.evaluation.noise_robustness import _SUBSTITUTE
 from src.utils.config import project_path
 from src.utils.io import read_jsonl
 
@@ -29,12 +29,22 @@ def load_split(source: str = "silver", split: str = "train", limit: int = None, 
 
 
 def noisy_copy(records: list, rate: float, seed: int = 0) -> list:
-    """Copy records with OCR-style noise in the text; tokens are re-read from the same offsets."""
+    """Copy records with OCR-style noise in the text; tokens are re-read from the same offsets.
+
+    Characters inside percentage tokens ("5%") are not changed: "S%" would be split into two words
+    by the tokenizer and the labels would no longer line up. Everything else, including additive
+    codes ("330" -> "33O"), can receive noise.
+    """
     rng = random.Random(seed)
     out = []
     for r in records:
-        text = add_ocr_noise(r["text"], rate, rng)
-        assert len(text) == len(r["text"])
+        protected = {i for (s, e), tok in zip(r["token_offsets"], r["tokens"]) if tok.endswith("%")
+                     for i in range(s, e)}
+        chars = list(r["text"])
+        for i, ch in enumerate(chars):
+            if i not in protected and ch in _SUBSTITUTE and rng.random() < rate:
+                chars[i] = rng.choice(_SUBSTITUTE[ch])
+        text = "".join(chars)
         tokens = [text[s:e] for s, e in r["token_offsets"]]
         entities = [{**e, "text": text[e["start"]:e["end"]]} for e in r["entities"]]
         out.append({**r, "text": text, "tokens": tokens, "entities": entities})

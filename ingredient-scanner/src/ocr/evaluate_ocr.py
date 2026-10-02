@@ -8,8 +8,9 @@ Reference: for each photo we know the product's ingredient list (typed into Open
 silver entities. These products are in the held-out TEST split, so no model was trained on them.
 
 Measured:
-  OCR quality        character error rate (CER) and word recall of the extracted ingredients section
-                     vs the reference text; how the section was found (keyword / comma density / full text)
+  OCR quality        word recall of the FULL OCR text (can the OCR read the list at all?), word recall
+                     and character error rate (CER) of the extracted section, how the section was found.
+                     Per-photo values: reports/ocr_per_photo.csv
   Entity agreement   entities found in the OCR text vs the reference entities, compared as
                      (label, normalised text). Offsets cannot be compared because OCR text differs.
                      "fuzzy" also accepts small spelling differences (similarity >= 85/100, same label).
@@ -121,39 +122,60 @@ def predict_entities(system, text):
     return bio_to_entities(processed["token_offsets"], tags, processed["text"])
 
 
+def word_recall(reference: str, hypothesis: str) -> float:
+    ref_words = set(re.findall(r"[a-z]{3,}", reference))
+    return len(ref_words & set(re.findall(r"[a-z]{3,}", hypothesis))) / max(1, len(ref_words))
+
+
 def evaluate():
+    from src.ocr.section_extraction import extract_ingredients_section
     ocr = {r["product_id"]: r for r in read_jsonl(OCR_CACHE)}
+    for r in ocr.values():                 # re-run section extraction: it is cheap, OCR is not
+        section = extract_ingredients_section(r["corrected_text"])
+        r["section"], r["section_method"] = section["text"], section["method"]
     test = {r["id"]: r for r in load_split("silver", "test") if r["id"] in ocr}
     report = {"photos": len(ocr)}
 
-    cers, recalls = [], []
+    rows = []
     for pid, r in ocr.items():
-        ref, hyp = normalise(test[pid]["text"]), normalise(r["section"])
-        cers.append(Levenshtein.normalized_distance(ref, hyp))
-        ref_words = set(re.findall(r"[a-z]{3,}", ref))
-        recalls.append(len(ref_words & set(re.findall(r"[a-z]{3,}", hyp))) / max(1, len(ref_words)))
-    report["ocr"] = {"median_cer": round(float(pd.Series(cers).median()), 3),
-                     "mean_cer": round(float(pd.Series(cers).mean()), 3),
-                     "median_word_recall": round(float(pd.Series(recalls).median()), 3),
-                     "section_methods": dict(Counter(r["section_method"] for r in ocr.values()))}
+        ref = normalise(test[pid]["text"])
+        rows.append({"product_id": pid, "market": r["country_group"], "section_method": r["section_method"],
+                     "cer_section": Levenshtein.normalized_distance(ref, normalise(r["section"])),
+                     "word_recall_full_ocr": word_recall(ref, normalise(r["ocr_text"])),
+                     "word_recall_section": word_recall(ref, normalise(r["section"])),
+                     "ocr_confidence": r["mean_confidence"]})
+    per_photo = pd.DataFrame(rows)
+    per_photo.round(3).to_csv(project_path("reports/ocr_per_photo.csv"), index=False)
+    report["ocr"] = {
+        "median_cer_section": round(float(per_photo["cer_section"].median()), 3),
+        "median_word_recall_full_ocr": round(float(per_photo["word_recall_full_ocr"].median()), 3),
+        "median_word_recall_section": round(float(per_photo["word_recall_section"].median()), 3),
+        "photos_readable (full-text word recall >= 0.5)": int((per_photo["word_recall_full_ocr"] >= 0.5).sum()),
+        "section_methods": dict(Counter(per_photo["section_method"])),
+        "by_market_median_word_recall_full_ocr": per_photo.groupby("market")["word_recall_full_ocr"].median().round(3).to_dict(),
+    }
 
-    report["systems"] = {}
+    readable = set(per_photo.loc[per_photo["word_recall_full_ocr"] >= 0.5, "product_id"])
+    report["systems"], report["systems_readable_photos_only"] = {}, {}
     for name, system in load_systems().items():
-        exact, fuzzy, add = [0, 0, 0], [0, 0, 0], [0, 0, 0]
-        for pid, r in ocr.items():
-            gold = entity_keys(test[pid]["entities"])
-            pred_entities = predict_entities(system, r["section"])
-            pred = entity_keys(pred_entities)
-            for acc, scores in ((exact, bag_scores(pred, gold, False)), (fuzzy, bag_scores(pred, gold, True))):
-                for i in range(3):
-                    acc[i] += scores[i]
-            ours, ref = additive_numbers(pred_entities), additive_numbers(test[pid]["entities"])
-            add[0] += len(ours & ref)
-            add[1] += len(ours)
-            add[2] += len(ref)
-        report["systems"][name] = {"entities_exact": prf(*exact), "entities_fuzzy": prf(*fuzzy),
-                                   "additive_numbers": prf(*add)}
-        print(name, report["systems"][name], flush=True)
+        for subset_name, subset in (("systems", set(ocr)), ("systems_readable_photos_only", readable)):
+            exact, fuzzy, add = [0, 0, 0], [0, 0, 0], [0, 0, 0]
+            for pid in subset:
+                r = ocr[pid]
+                gold = entity_keys(test[pid]["entities"])
+                pred_entities = predict_entities(system, r["section"])
+                pred = entity_keys(pred_entities)
+                for acc, scores in ((exact, bag_scores(pred, gold, False)), (fuzzy, bag_scores(pred, gold, True))):
+                    for i in range(3):
+                        acc[i] += scores[i]
+                ours, ref = additive_numbers(pred_entities), additive_numbers(test[pid]["entities"])
+                add[0] += len(ours & ref)
+                add[1] += len(ours)
+                add[2] += len(ref)
+            report[subset_name][name] = {"photos": len(subset), "entities_exact": prf(*exact),
+                                         "entities_fuzzy": prf(*fuzzy), "additive_numbers": prf(*add)}
+        print(name, "all:", report["systems"][name]["additive_numbers"],
+              "readable:", report["systems_readable_photos_only"][name]["entities_fuzzy"], flush=True)
     project_path("reports/ocr_end_to_end.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report["ocr"], indent=2))
 

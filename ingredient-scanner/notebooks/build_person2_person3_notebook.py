@@ -267,6 +267,8 @@ md("""
 * **CPU training.** 8,000 sentences, 1–2 epochs. More data or epochs would likely help.
 * **OCR.** Curved, glossy or small print causes errors. The photo reference text is crowd-typed.
   Section extraction fails when "Ingredients" is not printed or not recognised.
+* **Missing separators.** When OCR loses all commas (second example in A5), neither the rules nor the
+  model split the ingredients correctly.
 * **English only.** Labels in other languages or scripts are not handled.
 * **No health claims.** The app identifies and explains ingredients; it does not rate products.
 """)

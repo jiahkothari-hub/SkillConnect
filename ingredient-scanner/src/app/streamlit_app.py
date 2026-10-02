@@ -47,8 +47,16 @@ def example_photos() -> pd.DataFrame:
     photos = pd.read_csv(index, dtype={"product_id": str})
     names = pd.read_csv(products, dtype={"product_id": str}, usecols=["product_id", "product_name", "brands"])
     photos = photos.merge(names, on="product_id", how="left")
+    quality = ROOT / "reports/ocr_per_photo.csv"          # measured OCR readability of each photo
+    if quality.exists():
+        q = pd.read_csv(quality, dtype={"product_id": str})[["product_id", "word_recall_full_ocr"]]
+        photos = photos.merge(q, on="product_id", how="left").sort_values("word_recall_full_ocr", ascending=False)
+        photos["quality"] = photos["word_recall_full_ocr"].map(lambda r: "clear photo" if r >= 0.8 else
+                                                                 "readable" if r >= 0.5 else "hard photo")
+    else:
+        photos["quality"] = "photo"
     photos["title"] = (photos["product_name"].fillna("Unnamed product") + " - " + photos["brands"].fillna("")
-                       + " (" + photos["country_group"] + ")")
+                       + " (" + photos["country_group"] + ", " + photos["quality"] + ")")
     return photos
 
 
@@ -113,13 +121,13 @@ def show_result(result: dict):
             "What that means": e["description"],
             "More information": e["more_info_url"] or None,
         } for e in additives])
-        st.dataframe(table, hide_index=True, use_container_width=True,
+        st.dataframe(table, hide_index=True, width="stretch",
                      column_config={"More information": st.column_config.LinkColumn(display_text="Wikidata")})
 
     with st.expander("Details: every entity and how it was linked"):
         st.dataframe(pd.DataFrame(result["entities"])[["text", "label", "canonical_name", "ins_number", "function",
                                                         "link_method", "link_score"]],
-                     hide_index=True, use_container_width=True)
+                     hide_index=True, width="stretch")
     if "ocr" in result:
         with st.expander("Details: OCR"):
             o = result["ocr"]
@@ -177,6 +185,9 @@ if image_bytes is not None:
 if result:
     if not result["entities"]:
         st.warning("No ingredients were recognised. Try a sharper, well-lit photo of the ingredient list only.")
+        if "ocr" in result:
+            with st.expander("Details: OCR", expanded=True):
+                st.text_area("Text read from the photo", result["ocr"]["full_text"], height=180)
     else:
         st.caption(f"Classifier: {result['ner_model']}")
         show_result(result)

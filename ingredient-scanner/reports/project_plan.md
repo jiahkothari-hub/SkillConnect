@@ -121,3 +121,5 @@ Three layers, kept separate on purpose:
 | 5 | Grouped (leakage-free) train/validation/test split, HF-ready files, `label2id.json` | done |
 | 6 | Dictionary baseline evaluated on gold test: overall + per-class P/R/F1 | code done: run after gold |
 | 7 | Error analysis CSV and limitations section | code done: run after gold |
+| P2 | CRF, DistilBERT (+augmentation, +CRF), BERT; comparison on silver / OCR-noisy test; exported model | done (see README Part 2) |
+| P3 | Knowledge base, 60 real packet photos, EasyOCR pipeline, entity linking, scanner, Streamlit app, Docker | done (see README Part 3) |

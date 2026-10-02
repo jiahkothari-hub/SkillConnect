@@ -4,8 +4,10 @@ A photo of a packet also contains the brand, nutrition table, address, storage a
 the part after "Ingredients:" and before the next section.
 
 Strategy (first that works):
-  1. keyword: find "Ingredients" (tolerant to OCR errors: "lngredients", "INGREDIENTS", "Ingredlents")
-     and stop at the first end marker (nutrition, allergen advice, storage, manufacturer, net weight ...).
+  1. keyword: find every "Ingredients" (tolerant to OCR errors: "lngredients", "INGREDIENTS", "Ingredlents"),
+     cut each candidate at the first end marker (nutrition, allergen advice, storage, manufacturer, FSSAI ...)
+     and keep the candidate that looks most like a list (commas; a colon right after the keyword).
+     This skips sentences such as "allergens: see ingredients in bold".
   2. comma density: no keyword found -> take the block of consecutive lines with the most commas
      (ingredient lists are the most comma-dense text on a pack).
   3. full text: nothing better found -> use everything (the NER step ignores non-ingredient text
@@ -18,7 +20,7 @@ END_RE = re.compile(
     r"\b(?:nutrition(?:al)?(?:\s+(?:information|facts|value))?|typical\s+values|energy\s*\(?k?j|"
     r"allerg(?:en|y)\s+(?:information|advice)|storage|store\s+(?:in|at)|keep\s+(?:refrigerated|in)|"
     r"best\s+before|use\s+by|manufactured\s+(?:by|for)|marketed\s+by|packed\s+by|mfd\.?\s+by|"
-    r"net\s+(?:wt|weight|qty|quantity)|mrp|m\.r\.p|fssai|lic\.?\s*no|customer\s+care|"
+    r"net\s+(?:wt|weight|qty|quantity)|mrp|m\.r\.p|[fj]s+a[il1]|lic\.?\s*no|customer\s+care|cust\.?\s+care|"
     r"directions|serving\s+suggestion|preparation|batch\s+no|www\.)",
     re.IGNORECASE,
 )
@@ -27,11 +29,18 @@ END_RE = re.compile(
 def extract_ingredients_section(ocr_text: str) -> dict:
     """Return {"text", "method", "start", "end"} with offsets into `ocr_text`."""
     flat = ocr_text.replace("\n", " ")
-    start = START_RE.search(flat)
-    if start:
+    candidates = []
+    for start in START_RE.finditer(flat):
         end = END_RE.search(flat, start.end())
         stop = end.start() if end else len(flat)
-        return {"text": flat[start.end():stop].strip(" :;.-"), "method": "keyword", "start": start.end(), "end": stop}
+        text = flat[start.end():stop].strip(" :;.-")
+        # a real ingredient list has separators; "Ingredients:" with a colon is a strong signal
+        score = text.count(",") + text.count(";") + (3 if ":" in start.group(0) else 0)
+        candidates.append((score, len(text), start.end(), stop, text))
+    if candidates:
+        score, _, begin, stop, text = max(candidates)
+        if text:
+            return {"text": text, "method": "keyword", "start": begin, "end": stop}
 
     lines = ocr_text.split("\n")
     best, best_score = None, 0

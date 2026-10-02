@@ -1,42 +1,88 @@
-# Ingredient Scanner: Data + NLP module (Person 1)
+# Ingredient Scanner
 
 *NLP-Based Detection and Interpretation of Hidden Food Ingredients*
 
-This module is the data foundation of the project:
-- a filtered Open Food Facts dataset;
-- a preprocessing function that also works on OCR text;
-- a 10-label entity schema with annotation guidelines;
-- dictionaries and rules, and a weakly-labelled (**silver**) NER dataset;
-- a workflow for human-verified (**gold**) data;
-- leakage-free splits;
-- a dictionary/rule baseline with an entity-level scorer and error analysis.
+Take a picture of a food packet's ingredient list. The app reads it (OCR), finds every ingredient
+(a fine-tuned DistilBERT NER model), and explains it in plain language:
+- sugars, including the ones under other names (dextrose, jaggery, invert syrup)
+- fats, sweeteners, preservatives, colours and other additives
+- INS/E codes translated into names and functions: *INS 330 → citric acid → acidity regulator*
 
-Person 2 trains Transformer NER models on its output. Person 3 reuses its preprocessing and
-interpretation functions on OCR text.
+The system **identifies and interprets** ingredients. It makes **no health claims**.
 
-The system **identifies** ingredients and additives and **interprets** them (*INS 330 → citric acid →
-acidity regulator*). It makes **no health claims**.
+```
+PACKET IMAGE → OCR (EasyOCR) → code clean-up → INGREDIENTS SECTION → TEXT NORMALISATION
+→ NER (DistilBERT, OCR-noise augmented) → ENTITY LINKING (knowledge base) → CATEGORY SUMMARY → APP
+```
 
-**Start here:** [`notebooks/ingredient_scanner_person1_pipeline.ipynb`](notebooks/ingredient_scanner_person1_pipeline.ipynb)
-walks through every stage with outputs and viva explanations.
+![app](reports/figures/app_text.png)
+
+## Quick start: run the app
+
+```bash
+cd ingredient-scanner
+pip install -r requirements.txt            # CPU is enough
+streamlit run src/app/streamlit_app.py     # http://localhost:8501
+```
+
+Tabs: **Camera** (take a picture), **Upload photo**, **Example packets** (60 real photos), **Paste text**.
+Docker and free hosting (Hugging Face Spaces): [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+```python
+from src.app.scanner import IngredientScanner                       # the same pipeline from Python
+result = IngredientScanner().scan_image("data/images/packets/8901063162518.jpg")
+result["summary"]["groups"]["SUGAR"], result["summary"]["hidden"]
+```
+
+## Project structure (three team roles)
+
+| Part | Who | Code | Main outputs |
+|---|---|---|---|
+| Data + NLP | Person 1 | `src/data`, `src/preprocessing`, `src/labeling`, `src/annotation`, `src/baseline`, `src/evaluation` | 22k-product dataset, schema, silver labels, splits, gold workflow, rule baseline |
+| Deep learning NER | Person 2 | `src/ner` | CRF, DistilBERT (+augmentation, +CRF), BERT; comparison; exported model `models/ingredient-ner-distilbert` |
+| OCR + KB + app | Person 3 | `src/ocr`, `src/kb`, `src/app` | EasyOCR pipeline, knowledge base, entity linking, scanner, Streamlit app, Docker |
+
+Notebooks with outputs and viva explanations:
+- [`notebooks/ingredient_scanner_person1_pipeline.ipynb`](notebooks/ingredient_scanner_person1_pipeline.ipynb)
+- [`notebooks/ingredient_scanner_person2_person3.ipynb`](notebooks/ingredient_scanner_person2_person3.ipynb)
 
 | Key document | Content |
 |---|---|
-| [`reports/entity_schema.md`](reports/entity_schema.md) | labels, annotation rules, overlap policy, ambiguous terms |
-| [`data/splits/README.md`](data/splits/README.md) | dataset card for Person 2 (format, label2id, loading, scoring) |
-| [`reports/project_plan.md`](reports/project_plan.md) | design decisions and their reasons |
-| [`reports/dataset_statistics.md`](reports/dataset_statistics.md), [`reports/silver_statistics.md`](reports/silver_statistics.md) | EDA |
+| [`reports/entity_schema.md`](reports/entity_schema.md) | 10 labels, annotation rules, overlap policy, ambiguous terms |
+| [`data/splits/README.md`](data/splits/README.md) | dataset card (format, label2id, loading, scoring) |
+| [`reports/model_comparison.md`](reports/model_comparison.md) | all NER systems, per-class scores |
+| [`models/ingredient-ner-distilbert/README.md`](models/ingredient-ner-distilbert/README.md) | model card |
+| [`reports/project_plan.md`](reports/project_plan.md) | design decisions |
 
-## Current status
+## Results at a glance
 
-| Stage | Status |
-|---|---|
-| Data acquisition, filtering, EDA | done: 22,355 products |
-| Preprocessing, schema, dictionaries, weak labelling | done: 22,323 silver records, ~358k entities |
-| Leakage-free split, Hugging Face files | done: 15,556 / 3,280 / 3,487 products |
-| Gold annotation | **files ready (400 products); human annotation not done yet → 0 gold records** |
-| Baseline P/R/F1 + error analysis on gold | code done and tested; **numbers appear after gold annotation** |
-| Checks that need no gold | agreement with OFF's additive parser F1 0.88; OCR-noise robustness |
+**NER systems** (strict entity-level micro F1; same 8,000 silver training sentences for every learned
+model; 1,000 held-out test products):
+
+| System | Clean text (silver test) | 5% OCR noise | 10% OCR noise | Sentences / s (CPU) |
+|---|---:|---:|---:|---:|
+| Dictionary + rules (baseline) | 1.000\* | 0.862 | 0.734 | 1114 |
+| CRF (hand-made features) | 0.949 | 0.872 | 0.796 | 664 |
+| BERT-base (cased) | 0.929 | 0.852 | 0.767 | 14 |
+| DistilBERT | 0.943 | 0.834 | 0.719 | 47 |
+| DistilBERT + CRF layer | 0.950 | 0.851 | 0.747 | 48 |
+| **DistilBERT + OCR-noise augmentation (final model)** | 0.940 | **0.922** | **0.900** | 45 |
+
+\* The silver labels are the dictionary's own output, so 1.0 is by construction. Clean-text scores show
+how well a model learned the labelling policy on unseen products. The noisy columns show robustness to
+OCR errors, the realistic setting for photos.
+
+**End to end on 60 real packet photos** (held-out test products, `python -m src.ocr.evaluate_ocr`):
+- OCR reads a median 72% of the ingredient words. 42 of 60 photos are readable (≥ 50% of words).
+- Additives identified by the final pipeline: precision 0.97, recall 0.48 (rules: 0.96 / 0.41).
+- On readable photos, entity F1 is 0.65 (fuzzy match). The remaining gap comes mostly from photos where
+  the print is too small or blurred to read.
+
+**Human-verified gold evaluation: pending.** The annotation files for 400 products are ready
+(section 7). After annotation, `python run_pipeline.py` and `python -m src.ner.evaluate_models` add
+gold scores to every table automatically.
+
+# Part 1: Data + NLP (Person 1)
 
 ## 1. Installation
 
@@ -46,7 +92,7 @@ Python 3.10+. From this folder (`ingredient-scanner/`):
 python -m venv .venv
 # Windows: .venv\Scripts\activate      macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-python -m pytest -q          # 36 tests
+python -m pytest -q          # 45 tests
 ```
 
 Every command is run from `ingredient-scanner/` and all paths are relative.
@@ -273,6 +319,113 @@ for ent in interpret_entities(result["text"], result["entities"]):
 * `declared_class` is the function written on the label, which is preferred. `reference_classes` are the
   possible functions from the taxonomy.
 
+# Part 2: Deep learning NER (Person 2)
+
+```bash
+bash train_all_models.sh        # everything below, one job after another (~2 h on a 4-core CPU)
+```
+
+### 2.1 Pretrained models
+`python -m src.ner.pretrained distilbert-base-uncased bert-base-cased` downloads the official checkpoints
+from Hugging Face's original public S3 bucket into `models/pretrained/` (not in git).
+
+### 2.2 Models (`src/ner/`)
+
+| Script | Model |
+|---|---|
+| `crf_baseline.py` | Linear-chain CRF (sklearn-crfsuite). Features: word, affixes, shape, ±2 context words. No dictionary features. |
+| `transformer_ner.py --model distilbert-base-uncased` | DistilBERT token classification |
+| `transformer_ner.py --crf` | Same + a CRF output layer (pytorch-crf) over the word sequence |
+| `transformer_ner.py --augment` | Same + OCR-noise augmentation: each epoch, half of the sentences get character confusions (l↔1, O↔0, S↔5, …) or a case change |
+| `transformer_ner.py --model bert-base-cased --lr 3e-5` | BERT-base |
+
+Training recipe:
+- word labels on the first sub-word, other sub-words ignored (-100);
+- AdamW, 10% warm-up + linear decay, gradient clipping, batch 16, max 256 sub-words, length-bucketed batches;
+- 2 epochs, best epoch on silver validation;
+- every learned model uses the same seeded 8,000-sentence training sample.
+
+On a CPU, PyTorch jobs must run one at a time: sharing cores made training ~10× slower.
+
+### 2.3 Evaluation and error analysis
+`python -m src.ner.evaluate_models` scores every system with the shared scorer on:
+- silver test;
+- silver test with 5% and 10% OCR noise;
+- gold test, once it exists.
+
+It writes:
+- `reports/model_comparison.{md,json}`
+- figures 12–13
+- one error CSV per system in `reports/error_analysis/` (false positive / negative, boundary, type errors, with tags)
+
+**Findings:**
+- On clean text every learned model reproduces the rule policy (F1 0.93–0.95). BERT-base is not better
+  than DistilBERT with this data and budget, and is 3× slower.
+- Without augmentation the Transformers are *not* more robust to OCR errors than the rules.
+- **OCR-noise augmentation is what makes the difference** (0.90 vs 0.73 F1 at 10% noise). It wins in every
+  class (figure 13), and it is the only model that recovers e.g. "dextr0se" → SUGAR or "potasium sorbate" → PRESERVATIVE.
+
+### 2.4 Exported model
+`python -m src.ner.export_model --run distilbert_aug` creates `models/ingredient-ner-distilbert/`:
+- float16 safetensors in shards under 45 MB, with label2id/id2label in `config.json`;
+- a model card.
+
+```python
+from transformers import pipeline
+ner = pipeline("token-classification", model="models/ingredient-ner-distilbert", aggregation_strategy="first")
+```
+
+# Part 3: OCR, knowledge base and app (Person 3)
+
+### 3.1 Knowledge base (`python -m src.kb.build_knowledge_base`, outputs in `data/knowledge_base/`)
+
+| Table | Content |
+|---|---|
+| `additives.csv` | 731 INS/E numbers: name, synonyms, NER label, functional classes and their definitions, vegetarian/vegan flags, Wikidata and EFSA links |
+| `function_classes.csv` | 53 classes with definitions ("Emulsifiers are substances which …") |
+| `ingredient_terms.csv` | all 1,556 dictionary terms with category and INS number |
+| `categories.csv` | plain-language description per category |
+| `products_nutrition.csv` | nutrition per 100 g for the 22k products (available for 8,909) |
+
+The knowledge base contains descriptions only, no health ratings. Source: Open Food Facts taxonomies (ODbL).
+
+### 3.2 Packet images
+`python -m src.ocr.collect_images` collects 60 real ingredient-label photos (24 India, 12 per other market)
+from **held-out test products** in Open Food Facts' public image bucket (CC BY-SA). For each product it
+picks the photo whose stored OCR text matches its known ingredient list.
+Output: `data/images/packets/`, `packets.csv`.
+
+### 3.3 OCR pipeline (`src/ocr/`)
+1. `ocr_pipeline.py`: EasyOCR (CRAFT detector + CRNN recogniser). Before OCR: greyscale, upscaling and
+   CLAHE contrast. After OCR: words are put in reading order, and rotations are tried if little text is found.
+2. `ocr_cleanup.py`: fixes OCR errors only inside additive codes ("(I5Od)" → "(150d)", "INS 33O" → "INS 330").
+3. `section_extraction.py`: finds the ingredients section. It scores every "Ingredients" occurrence
+   (tolerating "lngredients"), cuts at end markers (nutrition, FSSAI, storage …), and falls back to
+   comma density or the full text.
+
+### 3.4 Entity linking (`src/kb/entity_linking.py`)
+Each entity is linked to a knowledge-base entry by one of four methods, tried in order:
+1. INS number
+2. exact name
+3. fuzzy name (Levenshtein ≥ 88, so "potasium sorbate" → potassium sorbate)
+4. category description
+
+The function stated on the label ("Emulsifier (471)") is preferred over the reference function.
+
+### 3.5 Integrated scanner and app
+- `src/app/scanner.py`: `IngredientScanner().scan_image(...)` / `scan_text(...)` returns JSON. It contains
+  every entity with its link and function, a category summary, "hidden" names (sugars under other names,
+  additives written as codes) and a disclaimer.
+- `src/app/streamlit_app.py`: the user interface.
+- `src/app/screenshot_app.py`: automated UI screenshots. These are also the end-to-end check that the app works.
+
+![photo](reports/figures/app_photo.png)
+
+### 3.6 Deployment
+`Dockerfile` (CPU, everything bundled), `requirements-app.txt`, `.streamlit/config.toml`, and
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) (local, Docker, Hugging Face Spaces, Streamlit Cloud).
+The app has not been published to a public URL from this environment.
+
 ## Final processed files
 
 | File | Content |
@@ -286,11 +439,18 @@ All entity columns are **silver** (automatic) until the gold annotation is impor
 
 ## Limitations
 
-* Silver labels are noisy. INGREDIENT (59% of entities) comes from a fallback rule. Rare words are left
+* **Silver supervision.** All models learn from rule-made labels and inherit their policy and some of
+  their errors. Claims about real accuracy need the human-verified gold test set, which still has to be annotated.
+* **Silver label noise.** INGREDIENT (59% of entities) comes from a fallback rule. Rare words are left
   unlabelled to keep OCR garbage out.
-* Open Food Facts text is crowd-sourced and often OCR-ed ("lodized salt"). This is realistic, but the
-  noise also enters the silver labels.
-* English only (keyword heuristic). Bilingual EN/FR lists are removed. Mostly non-Latin lists (31) are skipped.
-* OFF functional classes are incomplete (e.g. lactic acid has none). The label's declared class is preferred.
-* Exact dictionary matching is brittle under OCR noise (F1 0.74 of clean output at 10% noise).
-* Baseline P/R/F1 and the error analysis require the gold annotation, which has not been done yet.
+* **Photos.** Small, curved, glossy or blurred print defeats OCR. 18 of the 60 test photos are unreadable,
+  which caps end-to-end recall. Section extraction fails if the "Ingredients" heading is not read.
+* **Missing separators.** When OCR loses all commas ("WHEAT FLOUR SUGAR PALM OIL …"), neither the rules
+  nor the model split the ingredients correctly.
+* **Compute.** CPU-only training: 8,000 sentences, 2 epochs. More data or epochs and a GPU would likely
+  help, especially BERT-base.
+* **Language.** English only (keyword heuristic). Bilingual EN/FR lists are removed. Mostly non-Latin
+  lists (31) are skipped.
+* **Knowledge base.** OFF functional classes are incomplete (e.g. lactic acid has none). The label's
+  declared class is preferred.
+* **No health claims.** The app identifies and explains ingredients. It does not rate products.
