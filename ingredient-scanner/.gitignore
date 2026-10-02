@@ -21,3 +21,7 @@ data/interim/*
 Thumbs.db
 .vscode/
 .idea/
+
+# Pretrained base weights and intermediate checkpoints (re-downloadable / re-trainable)
+models/pretrained/
+models/runs/
