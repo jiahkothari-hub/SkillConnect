@@ -7,7 +7,22 @@ requests>=2.31      # dataset download
 PyYAML>=6.0         # configs/data_config.yaml
 matplotlib>=3.8     # EDA figures
 pytest>=8.0         # tests
+tabulate>=0.9       # markdown tables in reports
 
-# Optional: run the notebook and verify Hugging Face compatibility
-datasets>=2.18      # Dataset.from_json(...) on the split files
+# Person 2 - NER models (install CPU PyTorch first if you have no GPU:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu)
+torch>=2.2
+transformers>=4.40
+pytorch-crf>=0.7          # CRF output layer on top of DistilBERT
+sklearn-crfsuite>=0.5     # classic CRF baseline
+datasets>=2.18            # Dataset.from_json(...) on the split files
+
+# Person 3 - OCR, knowledge base, app
+easyocr>=1.7
+opencv-python-headless>=4.8
+rapidfuzz>=3.0            # fuzzy entity linking, character error rate
+streamlit>=1.35
+Pillow>=10.0
+
+# Notebooks
 jupyter>=1.0

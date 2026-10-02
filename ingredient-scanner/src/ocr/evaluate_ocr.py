@@ -30,7 +30,7 @@ from src.kb.entity_linking import get_linker
 from src.labeling.lexicon import lookup_key
 from src.ner.data import load_split
 from src.utils.config import project_path
-from src.utils.io import read_jsonl, write_jsonl
+from src.utils.io import read_jsonl
 
 INDEX = project_path("data/images/packets.csv")
 OCR_CACHE = project_path("data/images/ocr_results.jsonl")
@@ -41,20 +41,25 @@ def normalise(text: str) -> str:
 
 
 def run_ocr():
+    """OCR every photo once. Results are appended photo by photo, so an interrupted run resumes."""
+    import json as _json
     from src.ocr.ocr_cleanup import fix_additive_codes
     from src.ocr.ocr_pipeline import read_image
     from src.ocr.section_extraction import extract_ingredients_section
-    rows = []
+    done = {r["product_id"] for r in read_jsonl(OCR_CACHE)} if OCR_CACHE.exists() else set()
     for photo in pd.read_csv(INDEX, dtype={"product_id": str}).itertuples():
+        if photo.product_id in done:
+            continue
         ocr = read_image(project_path(photo.image))
         cleaned = fix_additive_codes(ocr["text"])
         section = extract_ingredients_section(cleaned)
-        rows.append({"product_id": photo.product_id, "country_group": photo.country_group,
-                     "ocr_text": ocr["text"], "corrected_text": cleaned, "section": section["text"],
-                     "section_method": section["method"], "rotation": ocr["rotation"],
-                     "mean_confidence": ocr["mean_confidence"]})
+        row = {"product_id": photo.product_id, "country_group": photo.country_group,
+               "ocr_text": ocr["text"], "corrected_text": cleaned, "section": section["text"],
+               "section_method": section["method"], "rotation": ocr["rotation"],
+               "mean_confidence": ocr["mean_confidence"]}
+        with open(OCR_CACHE, "a", encoding="utf-8") as f:
+            f.write(_json.dumps(row, ensure_ascii=False) + "\n")
         print(f"  {photo.product_id}: {section['method']}, {len(section['text'])} chars", flush=True)
-    write_jsonl(rows, OCR_CACHE)
 
 
 def entity_keys(entities) -> list:
@@ -158,7 +163,7 @@ def main():
     parser.add_argument("--run-ocr", action="store_true")
     args = parser.parse_args()
     if args.run_ocr or not OCR_CACHE.exists():
-        run_ocr()
+        run_ocr()           # skips photos that are already cached
     evaluate()
 
 
