@@ -6,7 +6,7 @@ will live in `reports/entity_schema.md` (Stage 3); this file is the proposal it 
 ## 1. Architecture
 
 ```
-ingredient-scanner/
+IngredientScanner/
 ├── configs/data_config.yaml      every tunable number (quotas, thresholds, seed, URLs) in one place
 ├── data/
 │   ├── raw/                      untouched downloads (git-ignored; manifest + taxonomy committed)

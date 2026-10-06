@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-# src/utils/config.py -> parents[2] is the project root (ingredient-scanner/)
+# src/utils/config.py -> parents[2] is the project root (the repository root)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "data_config.yaml"
 
