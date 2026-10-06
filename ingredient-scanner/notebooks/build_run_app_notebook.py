@@ -40,7 +40,7 @@ md("## 2. Find (or get) the project folder")
 code("""
 def find_project():
     here = Path.cwd()
-    for candidate in [here, here.parent, Path("/content/ingredient-scanner"),
+    for candidate in [here, here.parent, Path("/content/IngredientScanner"), Path("/content/ingredient-scanner"),
                       Path("/content/SkillConnect/ingredient-scanner")]:
         if (candidate / "src" / "app" / "streamlit_app.py").exists():
             return candidate.resolve()
@@ -60,8 +60,9 @@ if ROOT is None and IN_COLAB:
         z.extractall("/content")
     ROOT = find_project()
 
-    # Option B: clone the GitHub repository instead (private repository: put a personal access token in the URL)
-    # !git clone -b claude/dreamy-bohr-w4clmw https://github.com/jiahkothari-hub/SkillConnect.git /content/SkillConnect
+    # Option B: clone the GitHub repository instead of uploading the zip
+    # (private repository: use https://<YOUR_TOKEN>@github.com/jiahkothari-hub/IngredientScanner.git)
+    # !git clone https://github.com/jiahkothari-hub/IngredientScanner.git /content/IngredientScanner
     # ROOT = find_project()
 
 if ROOT is None:
