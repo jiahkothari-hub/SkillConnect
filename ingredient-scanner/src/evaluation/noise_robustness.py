@@ -16,11 +16,6 @@ can be reused for that).
 import json
 import random
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
 from src.baseline.dictionary_ner import DictionaryNER
 from src.evaluation.metrics import evaluate_entities
 from src.preprocessing.normalize import normalize_text
@@ -68,6 +63,11 @@ def main():
         print(f"noise rate {rate:.2f}: F1 vs clean predictions = {scores['micro']['f1']:.3f}")
 
     project_path("reports/noise_robustness.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
+
+    # imported here (not at the top) so that the app, which reuses add_ocr_noise, needs no matplotlib
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(7.5, 4.2))
     labels = ["INS_CODE", "SUGAR", "FAT", "ADDITIVE", "INGREDIENT"]
