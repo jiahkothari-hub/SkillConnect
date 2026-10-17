@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 21. Settings -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <include layout="@layout/toolbar" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swNotifications" android:layout_width="match_parent" android:layout_height="56dp" android:text="🔔   Notifications" />
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swLocation" android:layout_width="match_parent" android:layout_height="56dp" android:text="📍   Location Services" />
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swSync" android:layout_width="match_parent" android:layout_height="56dp" android:text="🔄   Sync with Firebase" />
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swBackup" android:layout_width="match_parent" android:layout_height="56dp" android:text="💾   Auto Backup to File" />
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swDark" android:layout_width="match_parent" android:layout_height="56dp" android:text="🌙   Dark Mode" />
+
+        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="8dp" android:background="#DDDDDD" />
+
+        <TextView
+            android:id="@+id/tvAbout"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:text="ℹ   About App                                    &gt;"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvHelp"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:text="❓   Help &amp; Feedback                          &gt;"
+            android:textSize="14sp" />
+    </LinearLayout>
+</LinearLayout>

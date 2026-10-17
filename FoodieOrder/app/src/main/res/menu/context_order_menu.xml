@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Context Menu (long press on an order) -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/ctx_reorder" android:title="Reorder" />
+    <item android:id="@+id/ctx_details" android:title="View Details" />
+    <item android:id="@+id/ctx_cancel" android:title="Cancel Order" />
+    <item android:id="@+id/ctx_share" android:title="Share Order" />
+</menu>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="14dp">
+
+    <TextView
+        android:id="@+id/tvFbId"
+        android:layout_width="70dp"
+        android:layout_height="wrap_content"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView android:id="@+id/tvFbItem" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="15sp" />
+        <TextView android:id="@+id/tvFbRestaurant" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/grey" android:textSize="12sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:orientation="vertical">
+
+        <TextView android:id="@+id/tvFbPrice" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textStyle="bold" />
+        <TextView android:id="@+id/tvFbStatus" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/green" />
+    </LinearLayout>
+</LinearLayout>

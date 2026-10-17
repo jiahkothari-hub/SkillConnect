@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Options Menu shown in the Toolbar -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item android:id="@+id/action_cart" android:title="Cart"
+        android:icon="@drawable/ic_cart" app:showAsAction="always" />
+    <item android:id="@+id/action_share" android:title="Share Restaurant"
+        app:showAsAction="never" />
+    <item android:id="@+id/action_orders" android:title="My Orders"
+        app:showAsAction="never" />
+    <item android:id="@+id/action_settings" android:title="Settings"
+        app:showAsAction="never" />
+    <item android:id="@+id/action_logout" android:title="Logout"
+        app:showAsAction="never" />
+</menu>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 15. Firebase Realtime Database (write) -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <include layout="@layout/toolbar" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView style="@style/Label" android:layout_marginTop="0dp" android:text="Order ID" />
+            <EditText android:id="@+id/etOrderId" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="text" />
+
+            <TextView style="@style/Label" android:text="Restaurant" />
+            <EditText android:id="@+id/etRestaurant" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="text" />
+
+            <TextView style="@style/Label" android:text="Item" />
+            <EditText android:id="@+id/etItem" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="text" />
+
+            <TextView style="@style/Label" android:text="Price" />
+            <EditText android:id="@+id/etPrice" android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="number" />
+
+            <TextView style="@style/Label" android:text="Status" />
+            <Spinner android:id="@+id/spStatus" android:layout_width="match_parent" android:layout_height="48dp" android:background="@drawable/bg_box" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSaveFirebase"
+                style="@style/FullButton"
+                android:layout_marginTop="20dp"
+                android:text="Save to Firebase" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSyncAll"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Sync all My Orders (SQLite) to Firebase" />
+
+            <LinearLayout
+                android:id="@+id/layoutSuccess"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:contentDescription="ok"
+                    android:src="@drawable/ic_check_circle" />
+
+                <TextView
+                    android:id="@+id/tvResult"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:text="Data saved to Firebase Realtime Database!"
+                    android:textColor="@color/purple" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

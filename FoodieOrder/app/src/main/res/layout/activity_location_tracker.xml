@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 17. Google Location Tracker -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <include layout="@layout/toolbar" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <WebView
+            android:id="@+id/webMap"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView android:id="@+id/tvLat" style="@style/Label" android:text="Latitude: -" />
+        <TextView android:id="@+id/tvLng" style="@style/Label" android:layout_marginTop="4dp" android:text="Longitude: -" />
+        <TextView android:id="@+id/tvAddress" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Address: -" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGetLocation"
+            style="@style/FullButton"
+            android:text="Get Current Location" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchLive"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Track Location (Live)" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/green" />
+    </LinearLayout>
+</LinearLayout>

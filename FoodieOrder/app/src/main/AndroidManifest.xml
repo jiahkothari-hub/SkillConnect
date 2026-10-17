@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <application
+        android:name=".App"
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@drawable/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.FoodieOrder"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".SplashActivity"
+            android:exported="true"
+            android:theme="@style/Theme.FoodieOrder.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".LoginActivity" />
+        <activity android:name=".SignUpActivity" />
+        <activity android:name=".MainActivity" />
+        <activity android:name=".EditLocationActivity" />
+        <activity android:name=".WebsiteActivity" />
+        <activity android:name=".MyOrdersActivity" />
+        <activity android:name=".RestaurantDbActivity" />
+        <activity android:name=".TxtFileActivity" />
+        <activity android:name=".CsvFileActivity" />
+        <activity android:name=".FirebaseAuthActivity" />
+        <activity android:name=".FirebaseSyncActivity" />
+        <activity android:name=".FirebaseDataActivity" />
+        <activity android:name=".LocationTrackerActivity" />
+        <activity android:name=".LiveMapActivity" />
+        <activity android:name=".ProfileActivity" />
+        <activity android:name=".SettingsActivity" />
+    </application>
+
+</manifest>

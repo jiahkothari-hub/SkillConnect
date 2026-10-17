@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Popup Menu (More Options) -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/pop_cart" android:icon="@android:drawable/ic_menu_add" android:title="Add to Cart" />
+    <item android:id="@+id/pop_buy" android:icon="@android:drawable/ic_menu_send" android:title="Buy Now" />
+    <item android:id="@+id/pop_wishlist" android:icon="@android:drawable/btn_star_big_on" android:title="Add to Wishlist" />
+    <item android:id="@+id/pop_details" android:icon="@android:drawable/ic_menu_info_details" android:title="View Restaurant Details" />
+    <item android:id="@+id/pop_file" android:icon="@android:drawable/ic_menu_save" android:title="Save to File (TXT/CSV)" />
+    <item android:id="@+id/pop_map" android:icon="@android:drawable/ic_dialog_map" android:title="View on Map" />
+</menu>

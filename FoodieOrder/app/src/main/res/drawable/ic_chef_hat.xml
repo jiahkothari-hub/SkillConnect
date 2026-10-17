@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp" android:height="120dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- hat top -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="1.2" android:fillColor="#00000000"
+        android:pathData="M7,14A4,4 0 0,1 6.5,6.1A5.5,5.5 0 0,1 17.5,6.1A4,4 0 0,1 17,14Z" />
+    <!-- hat band -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="1.2" android:fillColor="#00000000"
+        android:pathData="M7,14V21H17V14" />
+    <!-- fork and knife -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="0.9" android:fillColor="#00000000"
+        android:pathData="M9.5,11V19 M8.5,11V13.5 M10.5,11V13.5 M8.5,13.5H10.5 M14.5,11C13.5,12 13.5,14 14.5,15V19" />
+</vector>
